@@ -81,12 +81,11 @@ export async function loadLiquidations(coins, { fetchImpl = fetch, now = Date.no
   try {
     const ctVals = parseCtVals(await okxData(OKX_INSTRUMENTS_URL, { fetchImpl }));
     const listed = coins.filter((c) => ctVals.has(underlying(c.symbol)));
-    const perCoin = [];
-    // 依序抓，避免撞到 OKX 每 2 秒 40 次的限流
-    for (const coin of listed) {
+    // 各幣同時抓（每幣內部依序翻頁），同時最多約 10 個請求，在 OKX 每 2 秒 40 次的限流內
+    const perCoin = await Promise.all(listed.map(async (coin) => {
       const uly = underlying(coin.symbol);
-      perCoin.push({ symbol: coin.symbol, ctVal: ctVals.get(uly), details: await fetchUnderlying(uly, { fetchImpl, now }) });
-    }
+      return { symbol: coin.symbol, ctVal: ctVals.get(uly), details: await fetchUnderlying(uly, { fetchImpl, now }) };
+    }));
     return { source: 'okx', updatedAt: new Date(now).toISOString(), ...summarize(perCoin, now) };
   } catch (err) {
     return { ...sample, source: 'sample', error: err.message };

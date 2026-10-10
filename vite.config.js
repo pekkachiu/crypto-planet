@@ -11,7 +11,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       // 3D 渲染（scenes、kit）交給 E2E 驗證；單元測試覆蓋純邏輯模組
-      include: ['src/data/**/*.js', 'src/sim/**/*.js', 'src/i18n/**/*.js', 'src/ui/format.js'],
+      include: ['src/data/**/*.js', 'src/sim/**/*.js', 'src/i18n/**/*.js', 'src/ui/format.js', 'src/ui/theme.js'],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
   },

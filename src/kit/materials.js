@@ -18,6 +18,29 @@ export function glow(color, intensity = 1) {
   return cache.get(key);
 }
 
+/**
+ * 日夜會變亮度的發光材質（窗戶、路燈）：白天低於 Bloom 門檻只是淺色，晚上亮起來泛光。
+ * 由 applyNight(k) 統一調整，k＝0 白天、1 夜晚。
+ */
+const nightables = [];
+
+export function nightGlow(color, dayIntensity, nightIntensity) {
+  const key = `night:${color}:${dayIntensity}:${nightIntensity}`;
+  if (!cache.has(key)) {
+    const base = new THREE.Color(color);
+    const material = new THREE.MeshBasicMaterial({ color: base.clone().multiplyScalar(dayIntensity), toneMapped: false });
+    nightables.push({ material, base, dayIntensity, nightIntensity });
+    cache.set(key, material);
+  }
+  return cache.get(key);
+}
+
+export function applyNight(k) {
+  for (const { material, base, dayIntensity, nightIntensity } of nightables) {
+    material.color.copy(base).multiplyScalar(dayIntensity + (nightIntensity - dayIntensity) * k);
+  }
+}
+
 /** 品牌色調成粉彩：往白色混一點，跟整體柔和色調搭配 */
 export function pastel(color, amount = 0.22) {
   return `#${new THREE.Color(color).lerp(new THREE.Color('#ffffff'), amount).getHexString()}`;
@@ -33,4 +56,10 @@ export const PALETTE = Object.freeze({
   rail: '#b8bfc8',
   /** 條紋遮雨棚的米白：純白在 Bloom 下會糊成光團 */
   stripe: '#e9e1d4',
+  lampPost: '#5b6470',
+  lampLight: '#ffd88a',
+  wood: '#a87b55',
+  lawn: '#7fc47c',
+  path: '#efe3cc',
+  stone: '#d9d2c5',
 });

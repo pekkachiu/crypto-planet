@@ -10,17 +10,24 @@ const LOCALES = { 'zh-TW': 'zh-TW', en: 'en-US' };
  * 介面層：只用 textContent 寫入外部 API 的資料，避免 XSS。
  * 切換語言時用記住的最後狀態重畫所有文字。
  */
-export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onClose, onPickCoin, onToggleLang }) {
+export function createUI({
+  t: initialT, lang: initialLang, theme: initialTheme,
+  onBack, onSpeed, onClose, onPickCoin, onPickPark, onToggleLang, onToggleTheme,
+}) {
   let t = initialT;
   let lang = initialLang;
   let toastTimer = 0;
   let lastStatus = null;
   let lastView = { mode: 'solar' };
   let lastCoin = null;
+  let lastPark = null;
+  let theme = initialTheme;
 
   $('back').addEventListener('click', onBack);
   $('lang').addEventListener('click', onToggleLang);
+  $('theme').addEventListener('click', onToggleTheme);
   $('coin-close').addEventListener('click', onClose);
+  $('park-close').addEventListener('click', onClose);
   for (const btn of document.querySelectorAll('[data-speed]')) {
     btn.addEventListener('click', () => {
       document.querySelectorAll('[data-speed]').forEach((b) => b.classList.toggle('active', b === btn));
@@ -48,15 +55,17 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
   /** body[data-view] 讓 E2E 測試能判斷目前視角 */
   const renderView = () => {
     const { mode, planet, coin } = lastView;
-    document.body.dataset.view = mode;
+    // 公園也是「特寫」視角，E2E 與鏡頭邏輯都把它當成 shop
+    document.body.dataset.view = mode === 'park' ? 'shop' : mode;
     $('back').hidden = mode === 'solar';
-    $('back').textContent = t(mode === 'shop' ? 'back.planet' : 'back.solar');
+    $('back').textContent = t(mode === 'shop' || mode === 'park' ? 'back.planet' : 'back.solar');
     const planetName = planet ? t(planetNameKey(planet)) : '';
     const subtitle = planet ? t(planetSubtitleKey(planet)) : '';
     const titles = {
       solar: () => t('view.solar'),
       planet: () => t('view.planet', { planet: planetName, subtitle }),
       shop: () => t('view.shop', { planet: planetName, symbol: coin?.symbol ?? '' }),
+      park: () => t('view.park', { planet: planetName }),
     };
     $('view-title').textContent = titles[mode]();
     $('coin-strip').hidden = mode === 'solar';
@@ -79,6 +88,41 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
     $('coin-share').textContent = buyShare(coin);
     $('coin-trades').textContent = formatCount(coin.trades);
     $('coin-pair').textContent = t('card.pair', { pair: coin.pair });
+  };
+
+  const renderPark = () => {
+    if (!lastPark) {
+      for (const id of ['park-total', 'park-long', 'park-short', 'park-share']) $(id).textContent = '…';
+      $('park-top').replaceChildren();
+      $('park-source').textContent = t('status.loading');
+      return;
+    }
+    const { long, short, byCoin, source, updatedAt } = lastPark;
+    const total = long + short;
+    $('park-total').textContent = formatUsd(total);
+    $('park-long').textContent = formatUsd(long);
+    $('park-short').textContent = formatUsd(short);
+    $('park-share').textContent = total > 0 ? `${((long / total) * 100).toFixed(1)}%` : '—';
+    $('park-top').replaceChildren(...byCoin.slice(0, 5).map((c) => {
+      const li = document.createElement('li');
+      const longEl = document.createElement('span');
+      longEl.className = 'down';
+      longEl.textContent = formatUsd(c.long);
+      const shortEl = document.createElement('span');
+      shortEl.className = 'up';
+      shortEl.textContent = formatUsd(c.short);
+      li.append(c.symbol, longEl, shortEl);
+      return li;
+    }));
+    $('park-source').textContent = source === 'okx'
+      ? t('park.source', { time: timeText(updatedAt) })
+      : t('park.sample');
+  };
+
+  const renderTheme = () => {
+    document.body.dataset.theme = theme;
+    $('theme').textContent = theme === 'night' ? '☀️' : '🌙';
+    $('theme').setAttribute('aria-label', t(theme === 'night' ? 'theme.toDay' : 'theme.toNight'));
   };
 
   /** 靜態文字：data-i18n 寫入內文、data-i18n-aria 寫入 aria-label */
@@ -105,12 +149,29 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
   const showCoin = (mapped) => {
     lastCoin = mapped;
     renderCoin();
+    $('park-card').hidden = true;
     $('coin-card').hidden = false;
+  };
+
+  const showPark = () => {
+    renderPark();
+    $('coin-card').hidden = true;
+    $('park-card').hidden = false;
   };
 
   /** 星球與店面視角底部的幣種列；手機上比直接點 3D 店面好按 */
   const setCoins = (mappedList, currentId) => {
-    $('coin-strip').replaceChildren(...mappedList.map(({ coin, trend }, index) => {
+    const parkBtn = document.createElement('button');
+    parkBtn.type = 'button';
+    parkBtn.className = 'park-btn';
+    parkBtn.dataset.park = '';
+    parkBtn.setAttribute('aria-current', String(currentId === 'park'));
+    const parkLabel = document.createElement('small');
+    parkLabel.dataset.i18n = 'park.strip';
+    parkLabel.textContent = t('park.strip');
+    parkBtn.append('🌳', parkLabel);
+    parkBtn.addEventListener('click', onPickPark);
+    $('coin-strip').replaceChildren(parkBtn, ...mappedList.map(({ coin, trend }, index) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.dataset.coin = coin.id;
@@ -138,10 +199,13 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
     renderStatus();
     renderView();
     renderCoin();
+    renderPark();
+    renderTheme();
   };
 
   renderStatic();
   renderStatus();
+  renderTheme();
 
   return {
     setStatus,
@@ -149,9 +213,19 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
     showCoin,
     setCoins,
     setLanguage,
-    hideCoin() {
+    hideCards() {
       lastCoin = null;
       $('coin-card').hidden = true;
+      $('park-card').hidden = true;
+    },
+    setParkData(liqs) {
+      lastPark = liqs;
+      renderPark();
+    },
+    showPark,
+    setTheme(next) {
+      theme = next;
+      renderTheme();
     },
     toast,
     doneLoading() { $('loading').classList.add('done'); },

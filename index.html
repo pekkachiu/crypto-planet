@@ -23,6 +23,7 @@
 
 <div id="top-actions">
   <button id="back" class="panel chip" type="button" hidden></button>
+  <button id="theme" class="panel chip" type="button"></button>
   <button id="lang" class="panel chip" type="button"></button>
 </div>
 
@@ -47,6 +48,21 @@
     <div><dt data-i18n="card.trades"></dt><dd id="coin-trades"></dd></div>
   </dl>
   <p class="label" id="coin-pair"></p>
+</aside>
+
+<aside id="park-card" class="panel" hidden aria-live="polite">
+  <button id="park-close" class="close" type="button" data-i18n-aria="card.close">×</button>
+  <div class="coin-head"><h2 data-i18n="park.name"></h2></div>
+  <div class="coin-price"><span id="park-total"></span></div>
+  <dl class="coin-stats">
+    <div><dt data-i18n="park.longLabel"></dt><dd id="park-long" class="down"></dd></div>
+    <div><dt data-i18n="park.shortLabel"></dt><dd id="park-short" class="up"></dd></div>
+    <div><dt data-i18n="park.longShare"></dt><dd id="park-share"></dd></div>
+  </dl>
+  <p class="label" data-i18n="park.top"></p>
+  <ol id="park-top" class="park-top"></ol>
+  <p class="label" data-i18n="park.legend"></p>
+  <p class="label" id="park-source"></p>
 </aside>
 
 <nav id="coin-strip" class="panel" data-i18n-aria="strip.label" hidden></nav>

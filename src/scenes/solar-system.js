@@ -88,8 +88,9 @@ function createSun() {
     new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffc766').multiplyScalar(1.1), toneMapped: false }),
   ));
   group.add(atmosphere(SUN_RADIUS * 1.1, '#ff9f45'));
-  group.add(new THREE.PointLight('#fff4e0', 1.5, 0, 0));
-  return group;
+  const light = new THREE.PointLight('#fff4e0', 1.5, 0, 0);
+  group.add(light);
+  return { group, light };
 }
 
 function createPlanetBody(config, index, radius, townField) {
@@ -113,9 +114,11 @@ function createPlanetBody(config, index, radius, townField) {
  * @param {{radii: Record<string, number>, townFields: Record<string, Function>, t: Function}} opts
  */
 export function createSolarSystem(scene, { radii, townFields, t }) {
-  scene.add(new THREE.AmbientLight('#fffaf2', 0.55));
-  scene.add(new THREE.HemisphereLight('#fff6ea', '#7d6d60', 0.6));
-  scene.add(starfield(), createSun());
+  const ambient = new THREE.AmbientLight('#fffaf2', 0.55);
+  const hemi = new THREE.HemisphereLight('#fff6ea', '#7d6d60', 0.6);
+  const stars = starfield();
+  const sun = createSun();
+  scene.add(ambient, hemi, stars, sun.group);
 
   const planets = new Map(PLANETS.map((config, i) => {
     const radius = radii[config.id] ?? config.radius;
@@ -145,7 +148,18 @@ export function createSolarSystem(scene, { radii, townFields, t }) {
     for (const p of planets.values()) p.label.setText(translate);
   };
 
+  /** 夜晚：環境光轉為冷色並變暗、陽光減弱、星星變大；白天反之（k：0 白天～1 夜晚） */
+  const DAY_AMBIENT = new THREE.Color('#fffaf2');
+  const NIGHT_AMBIENT = new THREE.Color('#7f93c9');
+  const setNight = (k) => {
+    ambient.color.lerpColors(DAY_AMBIENT, NIGHT_AMBIENT, k);
+    ambient.intensity = 0.55 - 0.33 * k;
+    hemi.intensity = 0.6 - 0.45 * k;
+    sun.light.intensity = 1.5 - 0.9 * k;
+    stars.material.size = 1.6 + 0.9 * k;
+  };
+
   setLanguage(t);
   update(0);
-  return { planets, update, pick, setLanguage };
+  return { planets, update, pick, setLanguage, setNight };
 }

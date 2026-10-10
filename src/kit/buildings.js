@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { flat, glow, pastel, PALETTE } from './materials.js';
+import { flat, glow, nightGlow, pastel, PALETTE } from './materials.js';
 
 /**
  * 四級建築，市值越大越高。所有建築一樓正面都在 z＝1（門口），
@@ -33,7 +33,7 @@ function gableRoof(w, h, d, material, y) {
 function windowBands(w, d, fromY, toY, gap, z = 0) {
   const group = new THREE.Group();
   for (let y = fromY + gap * 0.5; y < toY - 0.15; y += gap) {
-    group.add(box(w + 0.03, 0.13, d + 0.03, glow(PALETTE.window, 0.95), 0, y, z));
+    group.add(box(w + 0.03, 0.13, d + 0.03, nightGlow(PALETTE.window, 0.9, 1.2), 0, y, z));
   }
   return group;
 }
@@ -44,7 +44,7 @@ function storefront({ w, h, d, wall, awning, z = 0 }) {
   group.add(box(w, h, d, flat(wall), 0, 0, z));
   const front = z + d / 2 + 0.01;
   group.add(box(0.5, 0.78, 0.04, flat(PALETTE.door), 0, 0, front));
-  for (const x of [-0.75, 0.75]) group.add(box(0.55, 0.42, 0.04, glow(PALETTE.glass, 0.85), x, 0.32, front));
+  for (const x of [-0.75, 0.75]) group.add(box(0.55, 0.42, 0.04, nightGlow(PALETTE.glass, 0.85, 1.25), x, 0.32, front));
   const awn = box(w - 0.1, 0.07, 0.42, awning, 0, h - 0.18, front + 0.2);
   awn.rotation.x = 0.18;
   group.add(awn);
@@ -56,7 +56,7 @@ function kiosk({ k, roof, wall, awning }) {
   const h = 0.95 * k;
   const z = FRONT_Z - 0.55;
   g.add(box(1.5, h, 1.1, flat(wall), 0, 0, z));
-  g.add(box(1.0, 0.36, 0.04, glow(PALETTE.window, 0.9), 0, h * 0.42, FRONT_Z + 0.01));
+  g.add(box(1.0, 0.36, 0.04, nightGlow(PALETTE.window, 0.9, 1.2), 0, h * 0.42, FRONT_Z + 0.01));
   g.add(box(1.4, 0.08, 0.04, flat(PALETTE.trim), 0, h * 0.38, FRONT_Z + 0.03));
   // 條紋遮雨棚：品牌色與白色交錯
   for (let i = 0; i < 5; i++) {
@@ -78,7 +78,7 @@ function shopHouse({ k, roof, wall, awning }) {
   g.add(storefront({ w: 2.4, h: ground, d: 2.0, wall, awning }));
   g.add(box(2.3, upper, 1.9, flat(pastel(wall, 0.0)), 0, ground, 0));
   for (const x of [-0.7, 0, 0.7]) {
-    g.add(box(0.36, 0.42, 0.04, glow(PALETTE.window, 0.9), x, ground + upper * 0.3, 0.96));
+    g.add(box(0.36, 0.42, 0.04, nightGlow(PALETTE.window, 0.9, 1.2), x, ground + upper * 0.3, 0.96));
     g.add(box(0.46, 0.06, 0.12, flat(PALETTE.trim), x, ground + upper * 0.3 - 0.06, 1.0));
   }
   const roofH = 0.75;

@@ -13,6 +13,9 @@ import { createTown, townSpots, PLAZA_RADIUS } from './scenes/planet-town.js';
 import { createTerrainField } from './sim/terrain-field.js';
 import { planetNameKey } from './data/planets.js';
 import { detectLang, createTranslator, STORAGE_KEY } from './i18n/index.js';
+import { loadLiquidations } from './data/okx-liquidations.js';
+import { detectTheme, THEME_STORAGE_KEY } from './ui/theme.js';
+import { applyNight } from './kit/materials.js';
 import { createCameraRig, HOME } from './scenes/camera-rig.js';
 import { createUI } from './ui/panel.js';
 
@@ -29,6 +32,17 @@ const PLANET_DISTANCE = { min: 1.6, max: 6 };
 /** 注視點在門口隊伍中間（往南 lookAhead）、高度隨建築拉高一點，隊伍與樓頂都入鏡 */
 const SHOP_VIEW = { up: 4.2, back: 7.4, lookRatio: 0.24, minLook: 0.8, lookAhead: 1.4, refHeight: 4.5 };
 const MAJOR_TERRAIN_SEED = 118;
+/** OKX 爆倉歷史每 5 分鐘更新一次（每次要翻好幾頁，不必太頻繁） */
+const LIQ_REFRESH_MS = 5 * 60_000;
+/** 日夜切換的淡入淡出秒數 */
+const THEME_FADE_SECONDS = 1;
+/** 白天／夜晚的渲染參數：k＝0 白天、1 夜晚之間線性內插 */
+const LOOK = {
+  background: [new THREE.Color('#0a1226'), new THREE.Color('#03050b')],
+  exposure: [0.95, 0.85],
+  bloom: [0.55, 0.8],
+  fill: [0.65, 0.22],
+};
 const SHOP_DISTANCE = { min: 2.2, max: 24 };
 /** 繞店旋轉時，鏡頭最低只到接近地平線，不會鑽到地底 */
 const SHOP_MAX_POLAR = 1.38;
@@ -92,7 +106,9 @@ addEventListener('resize', () => {
 // ---------- 狀態 ----------
 const rig = createCameraRig(camera, controls);
 /** view：solar（太陽系）→ planet（星球全景）→ shop（店門口特寫）；飛行中為 flying */
-const state = { view: 'solar', speed: 1, simTime: 0, shopCoinId: null, focused: null };
+/** focusKey：店面特寫時是幣種 id，在公園時是 'park' */
+const state = { view: 'solar', speed: 1, simTime: 0, focusKey: null, focused: null };
+const PARK_KEY = 'park';
 let solar = null;
 let town = null;
 let majorRadius = 0;
@@ -115,6 +131,33 @@ function toggleLang() {
   history.replaceState(null, '', url);
   ui.setLanguage(t, lang);
   solar?.setLanguage(t);
+  town?.redrawPark(t);
+}
+
+// ---------- 白天／夜晚 ----------
+const themeStorage = {
+  get() { try { return localStorage.getItem(THEME_STORAGE_KEY); } catch { return null; } },
+  set(value) { try { localStorage.setItem(THEME_STORAGE_KEY, value); } catch { /* 存不了不影響使用 */ } },
+};
+let theme = detectTheme({ stored: themeStorage.get(), hour: new Date().getHours() });
+let nightK = theme === 'night' ? 1 : 0;
+
+function toggleTheme() {
+  theme = theme === 'night' ? 'day' : 'night';
+  themeStorage.set(theme);
+  ui.setTheme(theme);
+}
+
+const mix = ([day, night], k) => day + (night - day) * k;
+
+/** 依 k（0 白天～1 夜晚）套用燈光、天空、泛光與自發光材質 */
+function applyLook(k) {
+  scene.background.lerpColors(LOOK.background[0], LOOK.background[1], k);
+  renderer.toneMappingExposure = mix(LOOK.exposure, k);
+  bloom.strength = mix(LOOK.bloom, k);
+  fillLight.intensity = mix(LOOK.fill, k);
+  solar?.setNight(k);
+  applyNight(k);
 }
 
 const ui = createUI({
@@ -123,8 +166,11 @@ const ui = createUI({
   onToggleLang: () => toggleLang(),
   onBack: () => goBack(),
   onSpeed: (speed) => { state.speed = speed; },
+  onToggleTheme: () => toggleTheme(),
+  theme,
   onClose: () => { if (state.view === 'shop') goBack(); },
-  onPickCoin: (index) => enterShop(index),
+  onPickCoin: (index) => enterSpot({ kind: 'shop', index }),
+  onPickPark: () => enterSpot({ kind: 'park' }),
 });
 
 // ---------- 視角切換 ----------
@@ -181,9 +227,14 @@ function planetShot(planet) {
   return { position: target.clone().add(offset), target, up: WORLD_UP };
 }
 
-/** 店門口特寫：站在店的正前方（南側）斜上方，上方向是該處地面法線 */
-function shopShot(index) {
-  const { position, up, south, height } = town.shopFrame(index);
+/** 特寫鏡頭：站在店門口或公園入口的正前方（南側）斜上方，上方向是該處地面法線 */
+/** 公園比店面寬：取景時至少當成這個高度的建築來拉遠鏡頭 */
+const PARK_FRAME_HEIGHT = 8;
+
+function spotShot(target) {
+  const frame = target.kind === 'park' ? town.parkFrame() : town.shopFrame(target.index);
+  const { position, up, south } = frame;
+  const height = target.kind === 'park' ? Math.max(PARK_FRAME_HEIGHT, frame.height) : frame.height;
   const s = Math.max(1, height / SHOP_VIEW.refHeight) * fitFactor();
   return {
     position: position.clone().addScaledVector(up, SHOP_VIEW.up * s).addScaledVector(south, SHOP_VIEW.back * s),
@@ -206,20 +257,27 @@ async function enterPlanet(planet) {
   ui.setView('planet', planet.config);
 }
 
-async function enterShop(index) {
+/** 飛到店門口（{ kind: 'shop', index }）或爆倉公園（{ kind: 'park' }） */
+async function enterSpot(target) {
   if (state.view !== 'planet' && state.view !== 'shop') return;
-  const mapped = town.mappedAt(index);
-  state.shopCoinId = mapped.coin.id;
-  ui.setCoins(townData, mapped.coin.id);
-  await fly('shop', shopShot(index), SHOP_DISTANCE, SHOP_MAX_POLAR);
-  ui.showCoin(mapped);
-  ui.setView('shop', state.focused.config, mapped.coin);
+  const mapped = target.kind === 'shop' ? town.mappedAt(target.index) : null;
+  state.focusKey = mapped ? mapped.coin.id : PARK_KEY;
+  ui.setCoins(townData, state.focusKey);
+  ui.hideCards();
+  await fly('shop', spotShot(target), SHOP_DISTANCE, SHOP_MAX_POLAR);
+  if (mapped) {
+    ui.showCoin(mapped);
+    ui.setView('shop', state.focused.config, mapped.coin);
+  } else {
+    ui.showPark();
+    ui.setView('park', state.focused.config);
+  }
 }
 
 async function goBack() {
   if (state.view === 'shop') {
-    state.shopCoinId = null;
-    ui.hideCoin();
+    state.focusKey = null;
+    ui.hideCards();
     ui.setCoins(townData, null);
     const planet = state.focused;
     await fly('planet', planetShot(planet), planetDistance(planet));
@@ -258,8 +316,8 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 
 function handleTap() {
   if (state.view === 'planet' || state.view === 'shop') {
-    const index = town.pick(raycaster);
-    if (index >= 0) enterShop(index);
+    const target = town.pick(raycaster);
+    if (target) enterSpot(target);
     return;
   }
   if (state.view === 'solar') {
@@ -282,16 +340,32 @@ let refreshing = false;
 function applyData(coins) {
   townData = mapTown(coins);
   town.setData(townData);
-  ui.setCoins(townData, state.shopCoinId);
-  if (state.view !== 'shop') return;
+  ui.setCoins(townData, state.focusKey);
+  if (state.view !== 'shop' || state.focusKey === PARK_KEY) return;
   // 店面特寫中：排名變動就跟著那個幣飛到新位置；幣跌出前十就回到星球
-  const index = town.indexOf(state.shopCoinId);
+  const index = town.indexOf(state.focusKey);
   if (index < 0) {
     goBack();
     return;
   }
   ui.showCoin(town.mappedAt(index));
-  fly('shop', shopShot(index), SHOP_DISTANCE, SHOP_MAX_POLAR);
+  fly('shop', spotShot({ kind: 'shop', index }), SHOP_DISTANCE, SHOP_MAX_POLAR);
+}
+
+let refreshingLiqs = false;
+
+async function refreshLiquidations() {
+  if (refreshingLiqs || document.hidden || townData.length === 0) return;
+  refreshingLiqs = true;
+  try {
+    const liqs = await loadLiquidations(townData.map((m) => m.coin));
+    town.setLiquidations(liqs, t);
+    ui.setParkData(liqs);
+  } catch (err) {
+    console.error('[crypto-planet] 爆倉資料更新失敗', err);
+  } finally {
+    refreshingLiqs = false;
+  }
 }
 
 async function refresh() {
@@ -330,6 +404,9 @@ async function start() {
   ui.setView('solar');
   ui.doneLoading();
   setInterval(refresh, REFRESH_MS);
+  applyLook(nightK);
+  refreshLiquidations();
+  setInterval(refreshLiquidations, LIQ_REFRESH_MS);
   renderer.setAnimationLoop(frame);
 }
 
@@ -338,6 +415,12 @@ const clock = new THREE.Clock();
 
 function frame() {
   const dt = Math.min(clock.getDelta(), MAX_FRAME_DT);
+  const targetK = theme === 'night' ? 1 : 0;
+  if (nightK !== targetK) {
+    const stepK = dt / THEME_FADE_SECONDS;
+    nightK = Math.abs(targetK - nightK) <= stepK ? targetK : nightK + Math.sign(targetK - nightK) * stepK;
+    applyLook(nightK);
+  }
   const simDt = dt * state.speed;
   if (state.view === 'solar') {
     state.simTime += simDt;

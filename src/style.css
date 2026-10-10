@@ -57,13 +57,13 @@ body {
   display: flex; gap: 8px;
 }
 #top-actions .chip:hover { border-color: var(--accent); }
-#lang { min-width: 48px; font-family: var(--mono); }
+#lang, #theme { min-width: 48px; font-family: var(--mono); }
 .tier-badge {
   margin-left: auto; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
   color: var(--accent); background: rgba(76, 194, 255, 0.12); border: 1px solid rgba(76, 194, 255, 0.3);
 }
 
-#coin-card {
+#coin-card, #park-card {
   position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + 84px);
   width: 300px; padding: 18px 18px 14px;
 }
@@ -118,6 +118,11 @@ body {
   background: transparent; color: var(--text); font: 700 13px var(--sans); cursor: pointer;
 }
 #coin-strip button small { font: 500 11px var(--mono); }
+.park-top { margin: 4px 0 10px; padding-left: 20px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.park-top li { margin: 2px 0; }
+.park-top .down { margin-left: 8px; } .park-top .up { margin-left: 6px; }
+#coin-strip button.park-btn { color: #e6c25a; }
+#park-card .label + .label { margin-top: 4px; }
 #coin-strip button:hover { background: rgba(255, 255, 255, 0.06); }
 #coin-strip button[aria-current="true"] { border-color: var(--accent); background: rgba(76, 194, 255, 0.12); }
 
@@ -146,7 +151,7 @@ body {
   #status { font-size: 10px; letter-spacing: 0.02em; }
   #top-actions .chip { padding: 10px 12px; font-size: 13px; }
   #top-actions { flex-direction: column; align-items: flex-end; }
-  #coin-card {
+  #coin-card, #park-card {
     left: calc(var(--sl) + var(--gutter)); right: calc(var(--sr) + var(--gutter)); top: auto; width: auto;
     bottom: calc(var(--sb) + 136px); padding: 14px 14px 10px;
   }

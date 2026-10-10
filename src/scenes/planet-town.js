@@ -9,6 +9,7 @@ import { createSignboard } from '../kit/signboard.js';
 import { createCrowdMesh } from '../kit/crowd-mesh.js';
 import { PALETTE, pastel } from '../kit/materials.js';
 import { TREND_COLORS, coinColor, walkerColor } from '../kit/palette.js';
+import { createPark } from '../kit/park.js';
 
 /** 店面分布的球帽下緣（y 座標），排名越前越靠近北極 */
 const CAP_MIN_Y = 0.05;
@@ -19,12 +20,15 @@ const BOB_HEIGHT = 0.03;
 const MAX_PER_SHOP = RANGES.pedestrians[1] + 2 * RANGES.queue[1] + 16;
 
 /**
- * 小鎮店面在球面上的位置（單位法向量）。固定用 TOP_N 個點的排列取前 count 個，
- * 地形的廣場位置與店面就不會因為幣種數量變動而錯開。
+ * 小鎮在球面上的所有廣場位置（單位法向量）：第 0 個在北極、是爆倉公園，其後是店面。
+ * 固定用 TOP_N + 1 個點的排列，地形的廣場與店面不會因幣種數量變動而錯開。
  */
-export function townSpots(count = TOP_N) {
-  return capPoints(TOP_N, CAP_MIN_Y).slice(0, count);
+export function townSpots() {
+  return capPoints(TOP_N + 1, CAP_MIN_Y);
 }
+
+const parkSpot = () => townSpots()[0];
+const shopSpots = (count) => townSpots().slice(1, 1 + count);
 
 const UP = new THREE.Vector3(0, 1, 0);
 const toV3 = ({ x, y, z }) => new THREE.Vector3(x, y, z);
@@ -71,6 +75,13 @@ export function createTown(planetGroup, radius) {
   let shops = [];
   let crowd = null;
 
+  // 爆倉公園固定在北極，不隨幣種資料重建
+  const parkAnchor = createAnchor(radius, parkSpot());
+  const park = createPark(radius);
+  parkAnchor.add(park.group);
+  park.group.traverse((o) => { o.userData.park = true; });
+  planetGroup.add(parkAnchor);
+
   const disposeAll = () => {
     shops.forEach((s) => { s.shop.dispose(); s.sign.dispose(); });
     crowd?.dispose();
@@ -81,9 +92,9 @@ export function createTown(planetGroup, radius) {
     disposeAll();
     crowd = createCrowdMesh(count * MAX_PER_SHOP);
     root.add(crowd.group);
-    shops = townSpots(count).map((p) => {
+    shops = shopSpots(count).map((p) => {
       const anchor = createAnchor(radius, p);
-      const shop = createShop();
+      const shop = createShop(radius);
       const sign = createSignboard();
       anchor.add(shop.group, sign.sprite);
       root.add(anchor);
@@ -139,30 +150,37 @@ export function createTown(planetGroup, radius) {
   const sphere = new THREE.Sphere(new THREE.Vector3(), radius);
   const sphereHit = new THREE.Vector3();
 
-  /** 點擊判定：回傳被點到的店面索引，沒點到回傳 -1；被星球擋住的背面店面不算 */
+  /**
+   * 點擊判定：回傳 { kind: 'shop', index } 或 { kind: 'park' }，沒點到回傳 null。
+   * 被星球擋住的背面物件不算。
+   */
   const pick = (raycaster) => {
-    const targets = shops.flatMap((s) => [s.shop.group, s.sign.sprite]);
+    const targets = [park.group, ...shops.flatMap((s) => [s.shop.group, s.sign.sprite])];
     const hit = raycaster.intersectObjects(targets, true)[0];
-    if (!hit) return -1;
+    if (!hit) return null;
     planetGroup.getWorldPosition(sphere.center);
     if (raycaster.ray.intersectSphere(sphere, sphereHit)) {
       const planetDistance = raycaster.ray.origin.distanceTo(sphereHit);
-      if (hit.distance > planetDistance + 0.5) return -1;
+      if (hit.distance > planetDistance + 0.5) return null;
     }
-    return hit.object.userData.shopIndex ?? -1;
+    if (hit.object.userData.park) return { kind: 'park' };
+    const index = hit.object.userData.shopIndex;
+    return index === undefined ? null : { kind: 'shop', index };
   };
 
-  /** 店面在世界座標的位置、切面方向與建築高度，給鏡頭飛到店門口用 */
-  const shopFrame = (index) => {
-    const world = new THREE.Matrix4().multiplyMatrices(planetGroup.matrixWorld, shops[index].anchor.matrix);
+  /** 錨點在世界座標的位置、切面方向與建築高度，給鏡頭飛到店門口或公園用 */
+  const frameOf = (anchor, height) => {
+    const world = new THREE.Matrix4().multiplyMatrices(planetGroup.matrixWorld, anchor.matrix);
     const position = new THREE.Vector3();
     const east = new THREE.Vector3();
     const up = new THREE.Vector3();
     const south = new THREE.Vector3();
     world.decompose(position, new THREE.Quaternion(), new THREE.Vector3());
     world.extractBasis(east, up, south);
-    return { position, up: up.normalize(), south: south.normalize(), height: shops[index].shop.height };
+    return { position, up: up.normalize(), south: south.normalize(), height };
   };
+  const shopFrame = (index) => frameOf(shops[index].anchor, shops[index].shop.height);
+  const parkFrame = () => frameOf(parkAnchor, park.height);
 
   return {
     root,
@@ -171,6 +189,9 @@ export function createTown(planetGroup, radius) {
     render,
     pick,
     shopFrame,
+    parkFrame,
+    setLiquidations(liqs, t) { park.setData(liqs, t); },
+    redrawPark(t) { park.redraw(t); },
     /** 網頁字型載入完成後重畫招牌，避免先用備用字型畫好就一直停在那 */
     redrawSigns() {
       for (const s of shops) if (s.mapped) s.sign.draw(s.mapped.coin, s.mapped.trend, s.color);
