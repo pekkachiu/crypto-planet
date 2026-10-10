@@ -1,0 +1,36 @@
+import { describe, it, expect } from 'vitest';
+import { PLANETS, orbitPosition, findPlanet } from '../src/data/planets.js';
+
+describe('PLANETS', () => {
+  it('包含主流、迷因、AI、公鏈、ETF 五顆星球，且 id 不重複', () => {
+    const ids = PLANETS.map((p) => p.id);
+    expect(ids).toEqual(expect.arrayContaining(['major', 'meme', 'ai', 'layer1', 'etf']));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+  it('第一版只有主流星開放', () => {
+    expect(PLANETS.filter((p) => p.enabled).map((p) => p.id)).toEqual(['major']);
+  });
+  it('軌道半徑由內而外遞增，不會撞在一起', () => {
+    const orbits = PLANETS.map((p) => p.orbit);
+    expect(orbits).toEqual(orbits.toSorted((a, b) => a - b));
+    expect(new Set(orbits).size).toBe(orbits.length);
+  });
+});
+
+describe('orbitPosition', () => {
+  it('位置落在軌道半徑上，並隨時間前進', () => {
+    const p = { orbit: 50, speed: 0.1, phase: 0 };
+    const a = orbitPosition(p, 0);
+    const b = orbitPosition(p, 5);
+    expect(Math.hypot(a.x, a.z)).toBeCloseTo(50);
+    expect(Math.hypot(b.x, b.z)).toBeCloseTo(50);
+    expect(a).not.toEqual(b);
+  });
+});
+
+describe('findPlanet', () => {
+  it('依 id 找星球，找不到回傳 undefined', () => {
+    expect(findPlanet('major').name).toBe('主流星');
+    expect(findPlanet('nope')).toBeUndefined();
+  });
+});
