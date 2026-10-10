@@ -56,7 +56,8 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
   - 單向持倉模式沒有 `posSide`，改看 `side`：`sell` 是多單爆倉，`buy` 是空單爆倉。
   - 個別幣種失敗時加總成功的幣並標記 `partial`；之後的更新失敗時保留上一次的真實資料。
 - **SoSoValue**（`openapi.sosovalue.com/openapi/v1`，header `x-soso-api-key`）：每分鐘 20 次、每月 10 萬次，`etf-fetch.js` 每個請求間隔 3.2 秒並處理 429。資金流 T+1 結算，要拿最新已結算數字用 `/etfs/{ticker}/market-snapshot`；`summary-history` 的第一筆可能是 null，要跳過。
-- **API Key 只存在 GitHub Secrets 的 `SOSOVALUE_API_KEY`**，只有 `deploy.yml` 的抓資料那一步拿得到。`fetch-etf.mjs` 不載入任何 npm 套件；絕對不要把 Key 放進 `src/`、前端程式碼或任何 log。本機用 `.env.local`（已 gitignore）。
+- **API Key 存在 `github-pages` 環境（environment）的 secret `SOSOVALUE_API_KEY`**，不是 repo secret。這個環境只允許 main 分支，只有 `deploy.yml` 的 `etf-data` job 拿得到；該 job 不跑 `npm ci`，`fetch-etf.mjs` 也不載入任何 npm 套件。請求設 `redirect: 'error'`，避免 Key 被導向轉送。絕對不要把 Key 放進 `src/`、前端程式碼或任何 log。本機用 `.env.local`（已 gitignore）。
+- 排程（schedule）的 workflow 在 repo 60 天沒有活動後會被 GitHub 自動停用，ETF 資料就不會再更新；網頁會顯示資料日期，看到日期太舊時到 Actions 重新啟用。
 - 用 Python `urllib` 打 OKX 會被擋（403，缺 User-Agent），測試 API 請改用 Node 的 `fetch` 或 curl。
 
 ## 慣例

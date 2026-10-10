@@ -358,19 +358,20 @@ let refreshing = false;
 /** 更新某顆星球的小鎮；正在看這顆星球時一併更新底部列與店面特寫 */
 function applyTownData(id, mapped) {
   const entry = towns.get(id);
+  const previousIndex = state.focusKey ? entry.town.indexOf(state.focusKey) : -1;
   entry.data = mapped;
   entry.town.setData(mapped);
   if (state.focused?.config.id !== id) return;
   ui.setCoins(mapped, state.focusKey, { park: entry.town.hasPark });
   if (state.view !== 'shop' || state.focusKey === PARK_KEY) return;
-  // 店面特寫中：排名變動就跟著那間店飛到新位置；跌出前十就回到星球
+  // 店面特寫中：排名變動才跟著那間店飛到新位置（使用者正在繞店旋轉時不打斷）；跌出前十就回到星球
   const index = entry.town.indexOf(state.focusKey);
   if (index < 0) {
     goBack();
     return;
   }
   showShopCard(state.focused, entry.town.mappedAt(index));
-  fly('shop', spotShot({ kind: 'shop', index }), SHOP_DISTANCE, SHOP_MAX_POLAR);
+  if (index !== previousIndex) fly('shop', spotShot({ kind: 'shop', index }), SHOP_DISTANCE, SHOP_MAX_POLAR);
 }
 
 const applyData = (coins) => applyTownData(MAJOR, mapTown(coins));

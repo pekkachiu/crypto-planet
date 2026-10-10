@@ -56,10 +56,11 @@ describe('fetchEtfDataset', () => {
     expect(data.updatedAt).toBe(new Date(NOW).toISOString());
   });
 
-  it('清單裡格式不對的代號不會被拼進網址', async () => {
-    const fetchImpl = api({ '/etfs': (u) => (u.pathname.endsWith('/etfs') ? ok([{ ticker: '../../admin' }, ...LISTS[u.searchParams.get('symbol')]]) : null) });
+  it('清單裡格式不對的代號（包含 . 與 ..）不會被拼進網址', async () => {
+    const bad = [{ ticker: '../../admin' }, { ticker: '..' }, { ticker: '.' }];
+    const fetchImpl = api({ '/etfs': (u) => (u.pathname.endsWith('/etfs') ? ok([...bad, ...LISTS[u.searchParams.get('symbol')]]) : null) });
     const data = await run(fetchImpl);
-    expect(fetchImpl.mock.calls.some(([url]) => url.includes('admin'))).toBe(false);
+    expect(fetchImpl.mock.calls.some(([url]) => url.includes('admin') || url.includes('/etfs/./') || url.includes('/etfs/../'))).toBe(false);
     expect(data.etfs).toHaveLength(3);
   });
 
@@ -106,5 +107,38 @@ describe('fetchEtfDataset', () => {
   it('HTTP 成功但 code 不是 0 時視為失敗', async () => {
     const fetchImpl = api({ '/summary-history': () => ({ ok: true, status: 200, json: async () => ({ code: 400003, message: 'Invalid parameter: symbol' }) }) });
     await expect(run(fetchImpl)).rejects.toThrow('400003');
+  });
+
+  it('不跟隨重新導向，Key 不會被轉送到其他網址', async () => {
+    const fetchImpl = api();
+    await run(fetchImpl);
+    for (const [, init] of fetchImpl.mock.calls) expect(init.redirect).toBe('error');
+  });
+
+  it('retry_after 過大時最多等 120 秒；也接受 Retry-After header', async () => {
+    const limited = (body, headers = {}) => {
+      let first = true;
+      return () => {
+        if (!first) return ok(SNAPS.IBIT);
+        first = false;
+        return { ok: false, status: 429, headers: new Headers(headers), json: async () => body };
+      };
+    };
+    sleep.mockClear();
+    await run(api({ '/IBIT/': limited({ details: { retry_after: 99999 } }) }));
+    expect(sleep).toHaveBeenCalledWith(120_000);
+    sleep.mockClear();
+    await run(api({ '/IBIT/': limited({}, { 'Retry-After': '9' }) }));
+    expect(sleep).toHaveBeenCalledWith(9000);
+  });
+
+  it('快照缺少資產規模（解析失敗）也算失敗；超過一半就整體失敗', async () => {
+    const empty = () => ok({ ticker: 'X', net_assets: null });
+    await expect(run(api({ '/IBIT/': empty, '/FBTC/': empty }))).rejects.toThrow('2/3');
+  });
+
+  it('某個資產一檔都沒抓到時整體失敗，不發佈缺一半的資料', async () => {
+    const fail = () => ({ ok: false, status: 500, json: async () => ({}) });
+    await expect(run(api({ '/ETHA/': fail }))).rejects.toThrow('ETH');
   });
 });

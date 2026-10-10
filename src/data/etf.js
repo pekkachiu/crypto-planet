@@ -10,7 +10,8 @@ import { formatPrice, formatSignedUsd } from '../ui/format.js';
  */
 export const ETF_ASSETS = Object.freeze(['BTC', 'ETH']);
 export const ETF_SOURCE = 'sosovalue';
-const TICKER_RE = /^[A-Z0-9.]{1,10}$/;
+/** 代號開頭必須是英數字，'.'、'..' 不會被當成代號拼進網址路徑 */
+export const TICKER_RE = /^[A-Z0-9][A-Z0-9.]{0,9}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_NAME = 80;
 const MAX_EXCHANGE = 20;

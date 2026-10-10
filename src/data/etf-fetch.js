@@ -1,4 +1,4 @@
-import { ETF_ASSETS, parseSnapshot, parseSummary, buildEtfDataset } from './etf.js';
+import { ETF_ASSETS, TICKER_RE, parseSnapshot, parseSummary, buildEtfDataset } from './etf.js';
 
 /**
  * 從 SoSoValue 官方 API 抓 ETF 資料。只在 GitHub Actions（scripts/fetch-etf.mjs）執行，
@@ -7,15 +7,22 @@ import { ETF_ASSETS, parseSnapshot, parseSummary, buildEtfDataset } from './etf.
  */
 export const SOSO_BASE = 'https://openapi.sosovalue.com/openapi/v1';
 const COUNTRY = 'US';
-const TICKER_RE = /^[A-Z0-9.]{1,10}$/;
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_MS = 60_000;
+/** 被限流時最多等這麼久，避免 API 回傳異常大的值讓工作卡住 */
+const MAX_RETRY_MS = 120_000;
 const TIMEOUT_MS = 20_000;
 const SUMMARY_LIMIT = 5;
 /** 每分鐘 20 次 → 至少間隔 3 秒，多留一點餘裕 */
 export const MIN_INTERVAL_MS = 3_200;
 
 const realSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/** 429 時要等多久：優先看回應內容的 retry_after，其次是 Retry-After header（秒） */
+function retryDelay(res, body) {
+  const seconds = Number(body?.details?.retry_after ?? res.headers?.get?.('retry-after'));
+  return seconds > 0 ? Math.min(seconds * 1000, MAX_RETRY_MS) : DEFAULT_RETRY_MS;
+}
 
 function createClient({ apiKey, fetchImpl, sleep, minIntervalMs, clock }) {
   let lastAt = null;
@@ -36,12 +43,13 @@ function createClient({ apiKey, fetchImpl, sleep, minIntervalMs, clock }) {
       await throttle();
       const res = await fetchImpl(url.toString(), {
         headers: { 'x-soso-api-key': apiKey, accept: 'application/json' },
+        // 不跟隨重新導向：自訂 header 在跨網域導向時不會被移除，Key 可能被轉送到別的網站
+        redirect: 'error',
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       const body = await res.json().catch(() => null);
       if (res.status === 429 && attempt < MAX_RETRIES) {
-        const retryAfter = Number(body?.details?.retry_after);
-        await sleep(retryAfter > 0 ? retryAfter * 1000 : DEFAULT_RETRY_MS);
+        await sleep(retryDelay(res, body));
         continue;
       }
       if (!res.ok) throw new Error(`SoSoValue ${path} HTTP ${res.status}${body?.code ? ` (code ${body.code})` : ''}`);
@@ -53,7 +61,8 @@ function createClient({ apiKey, fetchImpl, sleep, minIntervalMs, clock }) {
 
 /**
  * 依序抓：每個資產的 ETF 清單與每日總計，再抓每檔 ETF 的最新已結算快照。
- * 單一基金失敗就略過；超過一半失敗代表 API 有狀況，整體失敗讓部署沿用上一次的資料。
+ * 單一基金失敗（請求錯誤或資料無法解析）就略過；超過一半失敗、或某個資產一檔都沒有，
+ * 代表 API 有狀況，整體失敗讓部署沿用上一次的資料，不發佈殘缺的資料。
  */
 export async function fetchEtfDataset({
   apiKey, fetchImpl = fetch, sleep = realSleep, now = Date.now(),
@@ -77,8 +86,9 @@ export async function fetchEtfDataset({
   let failed = 0;
   for (const { ticker, ...meta } of listings) {
     try {
-      const fund = parseSnapshot(await request(`/etfs/${ticker}/market-snapshot`), meta);
-      if (fund) funds.push(fund);
+      const fund = parseSnapshot(await request(`/etfs/${encodeURIComponent(ticker)}/market-snapshot`), meta);
+      if (!fund) throw new Error('快照缺少必要欄位');
+      funds.push(fund);
     } catch (err) {
       failed += 1;
       console.warn(`[etf] ${ticker} 略過：${err.message}`);
@@ -87,5 +97,7 @@ export async function fetchEtfDataset({
   if (listings.length === 0 || failed * 2 > listings.length) {
     throw new Error(`ETF 快照失敗 ${failed}/${listings.length}`);
   }
+  const missing = assets.filter((asset) => !funds.some((f) => f.asset === asset));
+  if (missing.length > 0) throw new Error(`沒有抓到 ${missing.join('、')} 的 ETF`);
   return buildEtfDataset({ funds, totals, now });
 }

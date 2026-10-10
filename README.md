@@ -58,7 +58,11 @@ npm run build      # 輸出到 dist/
 ### ETF 資料（需要 SoSoValue API Key）
 
 1. 到 [SoSoValue](https://openapi.sosovalue.com/) 申請免費 API Key（每分鐘 20 次、每月 10 萬次）。
-2. 部署用：repo 的 **Settings → Secrets and variables → Actions** 新增 `SOSOVALUE_API_KEY`。
+2. 部署用：把 Key 存成 `github-pages` **環境專用的 secret**（只有 main 分支的部署拿得到）：
+
+   ```bash
+   gh secret set SOSOVALUE_API_KEY --env github-pages   # 會提示你貼上 Key，不會留在指令紀錄
+   ```
 3. 本機測試（選用）：把 `SOSOVALUE_API_KEY=你的Key` 寫進 `.env.local`（已被 `.gitignore` 排除，不會進版本控制），再執行：
 
    ```bash
