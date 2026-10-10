@@ -85,10 +85,10 @@ function createSun() {
   const group = new THREE.Group();
   group.add(new THREE.Mesh(
     new THREE.IcosahedronGeometry(SUN_RADIUS, 3),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd27a').multiplyScalar(2.2), toneMapped: false }),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffc766').multiplyScalar(1.1), toneMapped: false }),
   ));
-  group.add(atmosphere(SUN_RADIUS * 1.25, '#ffb057'));
-  group.add(new THREE.PointLight('#fff4e0', 2.4, 0, 0));
+  group.add(atmosphere(SUN_RADIUS * 1.1, '#ff9f45'));
+  group.add(new THREE.PointLight('#fff4e0', 1.5, 0, 0));
   return group;
 }
 
@@ -113,8 +113,8 @@ function createPlanetBody(config, index, radius, townField) {
  * @param {{radii: Record<string, number>, townFields: Record<string, Function>, t: Function}} opts
  */
 export function createSolarSystem(scene, { radii, townFields, t }) {
-  scene.add(new THREE.AmbientLight('#fffaf2', 0.75));
-  scene.add(new THREE.HemisphereLight('#fff6ea', '#7d6d60', 0.85));
+  scene.add(new THREE.AmbientLight('#fffaf2', 0.55));
+  scene.add(new THREE.HemisphereLight('#fff6ea', '#7d6d60', 0.6));
   scene.add(starfield(), createSun());
 
   const planets = new Map(PLANETS.map((config, i) => {

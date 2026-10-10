@@ -52,7 +52,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: !IS_MOBILE, powerPreferenc
 renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY.maxPixelRatio));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 0.95;
 stage.appendChild(renderer.domElement);
 
 const labelRenderer = new CSS2DRenderer();
@@ -65,7 +65,7 @@ scene.background = new THREE.Color('#070b14');
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.05, 4000);
 camera.position.copy(HOME.position);
 // 跟著鏡頭的補光：不論星球公轉到哪，看小鎮時都有柔和的面光，低多邊形的面才看得出來
-const fillLight = new THREE.DirectionalLight('#fff6ea', 0.9);
+const fillLight = new THREE.DirectionalLight('#fff6ea', 0.65);
 fillLight.position.set(2, 4, 3);
 camera.add(fillLight);
 scene.add(camera);
@@ -81,7 +81,8 @@ controls.target.copy(HOME.target);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(
-  new THREE.Vector2(innerWidth * QUALITY.bloomScale, innerHeight * QUALITY.bloomScale), 0.85, 0.5, 0.82,
+  // 門檻 0.95：只有自發光（窗戶、信號燈、隕石、太陽）會泛光，被照亮的白牆不會糊成一片
+  new THREE.Vector2(innerWidth * QUALITY.bloomScale, innerHeight * QUALITY.bloomScale), 0.7, 0.45, 0.95,
 );
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -152,11 +153,26 @@ function setDistance({ min, max }, maxPolar = Math.PI) {
 const PORTRAIT_FIT_ASPECT = 1.1;
 const fitFactor = () => Math.max(1, PORTRAIT_FIT_ASPECT / camera.aspect);
 
+/** 星球附近的飛行路徑：至少離地表 AROUND_MIN 倍半徑，中段再拉高 AROUND_LIFT 倍半徑 */
+const AROUND = { min: 1.25, lift: 0.5 };
+
+function aroundPlanet(planet, shot) {
+  const center = planet.group.position;
+  const minDistance = Math.min(
+    planet.radius * AROUND.min,
+    camera.position.distanceTo(center),
+    shot.position.distanceTo(center),
+  );
+  return { center, minDistance, lift: planet.radius * AROUND.lift };
+}
+
 async function fly(view, shot, distance, maxPolar) {
   state.view = 'flying';
   document.body.dataset.view = 'flying';
   setDistance({ min: 0, max: Infinity });
-  await rig.flyTo(shot);
+  // 在星球上切換店面或返回星球全景時，繞著星球飛，不穿過地面
+  const nearPlanet = state.focused && view !== 'solar';
+  await rig.flyTo(nearPlanet ? { ...shot, around: aroundPlanet(state.focused, shot) } : shot);
   setDistance(distance, maxPolar);
   state.view = view;
 }

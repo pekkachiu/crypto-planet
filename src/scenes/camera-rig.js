@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { arcPoint } from '../sim/camera-path.js';
 
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
@@ -19,7 +20,8 @@ export function setControlsUp(controls, camera, up) {
 export function createCameraRig(camera, controls) {
   let flight = null;
 
-  const flyTo = ({ position, target, up = new THREE.Vector3(0, 1, 0) }, duration = 1.6) => new Promise((resolve) => {
+  /** around：在星球附近飛行時沿球面弧線繞過去，避免直線穿過星球 */
+  const flyTo = ({ position, target, up = new THREE.Vector3(0, 1, 0), around = null }, duration = 1.6) => new Promise((resolve) => {
     flight = {
       fromPos: camera.position.clone(),
       fromTarget: controls.target.clone(),
@@ -27,6 +29,7 @@ export function createCameraRig(camera, controls) {
       toPos: position.clone(),
       toTarget: target.clone(),
       toUp: up.clone().normalize(),
+      around,
       t: 0,
       duration,
       resolve,
@@ -38,7 +41,8 @@ export function createCameraRig(camera, controls) {
     if (!flight) return;
     flight.t = Math.min(1, flight.t + dt / flight.duration);
     const k = easeInOutCubic(flight.t);
-    camera.position.lerpVectors(flight.fromPos, flight.toPos, k);
+    if (flight.around) camera.position.copy(arcPoint(flight.fromPos, flight.toPos, k, flight.around));
+    else camera.position.lerpVectors(flight.fromPos, flight.toPos, k);
     controls.target.lerpVectors(flight.fromTarget, flight.toTarget, k);
     camera.up.lerpVectors(flight.fromUp, flight.toUp, k).normalize();
     camera.lookAt(controls.target);
