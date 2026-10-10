@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   // 相對路徑，讓 GitHub Pages 的 /crypto-planet/ 子路徑也能正常載入
   base: './',
+  // three.js 本身約 480 kB，無法再拆
+  build: { chunkSizeWarningLimit: 800 },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.js'],

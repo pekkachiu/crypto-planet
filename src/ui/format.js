@@ -21,3 +21,14 @@ export function formatPct(value) {
   const sign = value > 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}%`;
 }
+
+export function formatCount(value) {
+  if (!Number.isFinite(value)) return DASH;
+  return Math.round(value).toLocaleString('en-US');
+}
+
+/** 主動買入佔 24h 成交額的比例 */
+export function buyShare({ takerBuy, volume24h }) {
+  if (!(volume24h > 0)) return DASH;
+  return `${((takerBuy / volume24h) * 100).toFixed(1)}%`;
+}

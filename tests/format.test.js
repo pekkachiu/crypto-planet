@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatUsd, formatPrice, formatPct } from '../src/ui/format.js';
+import { formatUsd, formatPrice, formatPct, formatCount, buyShare } from '../src/ui/format.js';
 
 describe('formatUsd', () => {
   it('以 T/B/M/K 縮寫', () => {
@@ -35,5 +35,21 @@ describe('formatPct', () => {
   });
   it('無效值顯示破折號', () => {
     expect(formatPct(NaN)).toBe('—');
+  });
+});
+
+describe('formatCount', () => {
+  it('加上千分位', () => {
+    expect(formatCount(1627298)).toBe('1,627,298');
+    expect(formatCount(NaN)).toBe('—');
+  });
+});
+
+describe('buyShare', () => {
+  it('主動買入佔成交額的百分比', () => {
+    expect(buyShare({ takerBuy: 60, volume24h: 100 })).toBe('60.0%');
+  });
+  it('成交額為零時顯示破折號', () => {
+    expect(buyShare({ takerBuy: 0, volume24h: 0 })).toBe('—');
   });
 });
