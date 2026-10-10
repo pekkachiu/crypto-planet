@@ -13,6 +13,8 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
 node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 public/data/etf.json（本機測 ETF 星用）
 ```
 
+- **ETF 資料的 Key**：部署用的 Key 存成 `github-pages` 環境的 secret（`gh secret set SOSOVALUE_API_KEY --env github-pages`，或在 Settings → Environments 設定）。本機測試把 `SOSOVALUE_API_KEY=...` 寫進 `.env.local`（已 gitignore）。沒有 `public/data/etf.json` 時 ETF 星會上鎖，其他功能不受影響。
+- README 只寫給使用者看的專案介紹，不放開發教學；開發相關的內容都寫在這份 CLAUDE.md。截圖在 `docs/screenshots/`，從上線網站用 Playwright 拍、存成 JPEG。
 - 本機預覽請用 `npx vite preview --port 4173`。有 hook 會擋下指令裡出現「npm run dev」字樣的呼叫，包括寫進檔案內容的 heredoc。
 - 本機跑 E2E 時，如果 4173 已經有預覽伺服器，Playwright 會直接沿用（`reuseExistingServer`），測到的是舊的 `dist/`。改完程式先 `npm run build`。
 - zsh 裡不要把迴圈變數取名為 `path`，它會覆蓋 `$PATH`，之後所有指令都會找不到。
