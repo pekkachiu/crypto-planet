@@ -15,6 +15,10 @@ import { planetNameKey } from './data/planets.js';
 import { detectLang, createTranslator, STORAGE_KEY } from './i18n/index.js';
 import { createCameraRig, HOME } from './scenes/camera-rig.js';
 import { createUI } from './ui/panel.js';
+import { formatUsd } from './ui/format.js';
+import { createMeteorLayer } from './scenes/meteor-layer.js';
+import { connectLiquidations } from './data/liq-stream.js';
+import { emptyTally, addToTally, meteorSize, isBigLiquidation, BIG_LIQUIDATION_USD } from './data/liquidations.js';
 
 const IS_MOBILE = matchMedia('(pointer: coarse)').matches || innerWidth < 720;
 const QUALITY = IS_MOBILE ? { maxPixelRatio: 1.5, bloomScale: 0.5 } : { maxPixelRatio: 2, bloomScale: 1 };
@@ -29,6 +33,10 @@ const PLANET_DISTANCE = { min: 1.6, max: 6 };
 /** 注視點在門口隊伍中間（往南 lookAhead）、高度隨建築拉高一點，隊伍與樓頂都入鏡 */
 const SHOP_VIEW = { up: 4.2, back: 7.4, lookRatio: 0.24, minLook: 0.8, lookAhead: 1.4, refHeight: 4.5 };
 const MAJOR_TERRAIN_SEED = 118;
+/** 大額爆倉的鏡頭震動：強度隨鏡頭距離縮放，duration 秒內衰減完 */
+const SHAKE = { strength: 0.012, duration: 0.6 };
+const LIQ_TOAST_GAP_MS = 2500;
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SHOP_DISTANCE = { min: 2.2, max: 24 };
 /** 繞店旋轉時，鏡頭最低只到接近地平線，不會鑽到地底 */
 const SHOP_MAX_POLAR = 1.38;
@@ -94,6 +102,11 @@ const rig = createCameraRig(camera, controls);
 const state = { view: 'solar', speed: 1, simTime: 0, shopCoinId: null, focused: null };
 let solar = null;
 let town = null;
+let meteors = null;
+let liqTally = emptyTally();
+let lastLiqToastAt = 0;
+let shake = 0;
+const shakeOffset = new THREE.Vector3();
 let majorRadius = 0;
 
 // ---------- 語言 ----------
@@ -196,7 +209,7 @@ async function enterShop(index) {
   state.shopCoinId = mapped.coin.id;
   ui.setCoins(townData, mapped.coin.id);
   await fly('shop', shopShot(index), SHOP_DISTANCE, SHOP_MAX_POLAR);
-  ui.showCoin(mapped);
+  ui.showCoin(mapped, liqTally[mapped.coin.pair]);
   ui.setView('shop', state.focused.config, mapped.coin);
 }
 
@@ -274,7 +287,7 @@ function applyData(coins) {
     goBack();
     return;
   }
-  ui.showCoin(town.mappedAt(index));
+  ui.showCoin(town.mappedAt(index), liqTally[town.mappedAt(index).coin.pair]);
   fly('shop', shopShot(index), SHOP_DISTANCE, SHOP_MAX_POLAR);
 }
 
@@ -298,6 +311,31 @@ async function refresh() {
   }
 }
 
+// ---------- 爆倉隕石 ----------
+function onLiquidation(event) {
+  liqTally = addToTally(liqTally, event);
+  const index = town.indexOfPair(event.pair);
+  meteors.spawn({ shopIndex: index >= 0 ? index : null, side: event.side, size: meteorSize(event.usd) });
+  if (index < 0) return;
+  const mapped = town.mappedAt(index);
+  if (state.view === 'shop' && mapped.coin.id === state.shopCoinId) ui.showCoin(mapped, liqTally[event.pair]);
+  const now = performance.now();
+  if (isBigLiquidation(event.usd) && now - lastLiqToastAt > LIQ_TOAST_GAP_MS) {
+    lastLiqToastAt = now;
+    const key = event.side === 'long' ? 'toast.liqLong' : 'toast.liqShort';
+    ui.toast(t(key, { symbol: mapped.coin.symbol, amount: formatUsd(event.usd) }));
+  }
+}
+
+function onImpact(meteor) {
+  town.startle(meteor.shopIndex);
+  if (isBigImpact(meteor) && state.view !== 'solar' && !REDUCED_MOTION) shake = SHAKE.duration;
+}
+
+/** 隕石大小對應金額；大於大額門檻對應的大小才震動 */
+const BIG_METEOR_SIZE = meteorSize(BIG_LIQUIDATION_USD);
+const isBigImpact = (meteor) => meteor.size >= BIG_METEOR_SIZE;
+
 async function start() {
   const first = await loadTopCoins();
   const totalCap = first.coins.reduce((sum, c) => sum + c.marketCap, 0);
@@ -307,6 +345,7 @@ async function start() {
   });
   solar = createSolarSystem(scene, { radii: { major: majorRadius }, townFields: { major: majorField }, t });
   town = createTown(solar.planets.get('major').group, majorRadius);
+  meteors = createMeteorLayer(solar.planets.get('major').group, majorRadius, (i) => town.anchorMatrix(i));
   applyData(first.coins);
   if (first.source === 'live') lastLiveAt = first.updatedAt;
   ui.setStatus(first);
@@ -314,6 +353,7 @@ async function start() {
   ui.setView('solar');
   ui.doneLoading();
   setInterval(refresh, REFRESH_MS);
+  connectLiquidations({ onEvent: onLiquidation });
   renderer.setAnimationLoop(frame);
 }
 
@@ -327,6 +367,8 @@ function frame() {
     state.simTime += simDt;
     solar.update(state.simTime);
   }
+  camera.position.sub(shakeOffset);
+  shakeOffset.set(0, 0, 0);
   if (rig.flying) rig.update(dt);
   else controls.update();
 
@@ -338,6 +380,15 @@ function frame() {
   if (nearTown) {
     town.step(simDt);
     town.render();
+  }
+
+  // 隕石是即時事件，用真實時間播放，不受播放速度影響
+  for (const impact of meteors.update(dt)) onImpact(impact);
+  if (shake > 0) {
+    shake = Math.max(0, shake - dt);
+    const amp = camera.position.distanceTo(controls.target) * SHAKE.strength * (shake / SHAKE.duration);
+    shakeOffset.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(amp * 2);
+    camera.position.add(shakeOffset);
   }
 
   composer.render();

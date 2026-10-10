@@ -1,10 +1,22 @@
 import { test, expect } from '@playwright/test';
 import sample from '../src/data/sample.json' with { type: 'json' };
 
-/** 攔截外部 API，讓測試不依賴網路：CoinGecko 回錯誤 → 改用內建範例資料 */
+/**
+ * 攔截外部 API，讓測試不依賴網路：CoinGecko 回錯誤 → 改用內建範例資料；
+ * 爆倉 WebSocket 改接假伺服器，回傳 send() 讓測試主動推送事件。
+ */
 async function offline(page) {
   await page.route('https://api.coingecko.com/**', (route) => route.fulfill({ status: 503, body: '' }));
   await page.route('https://data-api.binance.vision/**', (route) => route.fulfill({ status: 503, body: '' }));
+  const sockets = [];
+  await page.routeWebSocket(/fstream\.binance\.com/, (ws) => { sockets.push(ws); });
+  return {
+    send(pair, side, usd) {
+      const payload = { e: 'forceOrder', E: Date.now(), o: { s: pair, S: side === 'long' ? 'SELL' : 'BUY', ap: String(usd), z: '1', p: String(usd), q: '1', T: Date.now() } };
+      for (const ws of sockets) ws.send(JSON.stringify(payload));
+    },
+    get connected() { return sockets.length; },
+  };
 }
 
 async function openSolar(page) {
@@ -13,8 +25,9 @@ async function openSolar(page) {
   await expect(page.locator('#loading')).toHaveClass(/done/);
 }
 
+let liq;
 test.beforeEach(async ({ page }) => {
-  await offline(page);
+  liq = await offline(page);
 });
 
 test('API 失敗時顯示範例資料，太陽系五顆星球都有標籤', async ({ page }) => {
@@ -100,4 +113,21 @@ test('英文瀏覽器預設顯示英文，資訊卡顯示建築等級', async ({
   await expect(page.locator('#coin-tier')).toHaveText('Skyscraper');
   await expect(page.locator('#back')).toHaveText('← Back to planet');
   await context.close();
+});
+
+test('爆倉事件：資訊卡累計多空金額，大額爆倉跳出提示', async ({ page }) => {
+  await openSolar(page);
+  await expect.poll(() => liq.connected).toBeGreaterThan(0);
+  await page.locator('[data-planet="major"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  const btc = sample.coins.find((c) => c.symbol === 'BTC');
+  await page.locator(`#coin-strip [data-coin="${btc.id}"]`).click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'shop', { timeout: 10_000 });
+
+  liq.send(btc.pair, 'long', 250_000);
+  liq.send(btc.pair, 'short', 1_000);
+  liq.send('ZZZUSDT', 'long', 5_000);
+  await expect(page.locator('#toast')).toContainText('BTC 多單爆倉 $250K');
+  await expect(page.locator('#coin-liq-long')).toHaveText('$250K');
+  await expect(page.locator('#coin-liq-short')).toHaveText('$1.00K');
 });

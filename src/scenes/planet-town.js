@@ -177,6 +177,11 @@ export function createTown(planetGroup, radius) {
     },
     mappedAt(index) { return shops[index]?.mapped ?? null; },
     indexOf(coinId) { return shops.findIndex((s) => s.mapped?.coin.id === coinId); },
+    indexOfPair(pair) { return shops.findIndex((s) => s.mapped?.coin.pair === pair); },
+    /** 店面錨點矩陣（星球座標），給隕石圖層定位 */
+    anchorMatrix(index) { return shops[index]?.anchor.matrix ?? null; },
+    /** 附近有隕石落地：該店的路人受驚散開 */
+    startle(index) { shops[index]?.sim?.startle(); },
     /** 遠景時只隱藏人潮（省效能），店面與招牌保持顯示 */
     setCrowdVisible(visible) { if (crowd) crowd.group.visible = visible; },
   };

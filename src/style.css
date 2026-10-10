@@ -94,6 +94,7 @@ body {
 .speed button.active { color: var(--text); border-color: var(--accent); background: rgba(76, 194, 255, 0.12); }
 .legend { display: flex; gap: 14px; margin: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.dot.meteor { border-radius: 50%; background: linear-gradient(90deg, var(--down) 50%, var(--up) 50%); }
 .dot.up { background: var(--up); } .dot.down { background: var(--down); } .dot.walker { background: #c9d3dd; }
 
 .planet-label {
@@ -151,7 +152,7 @@ body {
     bottom: calc(var(--sb) + 136px); padding: 14px 14px 10px;
   }
   .coin-head h2 { font-size: 20px; }
-  #coin-pair { display: none; }
+  #coin-pair, #coin-card .label[data-i18n] { display: none; }
   #coin-price { font-size: 20px; }
   .coin-stats { gap: 6px 10px; margin-bottom: 8px; }
   .coin-stats dt { font-size: 10px; }
