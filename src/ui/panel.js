@@ -1,10 +1,18 @@
-import { formatUsd, formatPrice, formatPct, formatCount, buyShare } from './format.js';
+import { formatUsd, formatSignedUsd, formatPrice, formatPct, formatCount, buyShare } from './format.js';
 import { planetNameKey, planetSubtitleKey } from '../data/planets.js';
 
 const $ = (id) => document.getElementById(id);
 const TOAST_MS = 2600;
 const TREND_CLASS = { up: 'up', down: 'down', flat: 'flat' };
 const LOCALES = { 'zh-TW': 'zh-TW', en: 'en-US' };
+/** 底部圖例：ETF 星的隊伍代表資金流，不是主動買賣 */
+const LEGENDS = {
+  default: { 'legend-buy': 'legend.buy', 'legend-sell': 'legend.sell', 'legend-walkers': 'legend.walkers' },
+  etf: { 'legend-buy': 'legend.etf.buy', 'legend-sell': 'legend.etf.sell', 'legend-walkers': 'legend.etf.walkers' },
+};
+const CARD_IDS = ['coin-card', 'park-card', 'etf-card'];
+const ratioPct = (v) => (Number.isFinite(v) ? formatPct(v * 100) : '—');
+const feePct = (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(2)}%` : '—');
 
 /**
  * 介面層：只用 textContent 寫入外部 API 的資料，避免 XSS。
@@ -21,6 +29,8 @@ export function createUI({
   let lastView = { mode: 'solar' };
   let lastCoin = null;
   let lastPark = null;
+  let lastEtf = null;
+  let etfMeta = null;
   let theme = initialTheme;
 
   $('back').addEventListener('click', onBack);
@@ -28,6 +38,7 @@ export function createUI({
   $('theme').addEventListener('click', onToggleTheme);
   $('coin-close').addEventListener('click', onClose);
   $('park-close').addEventListener('click', onClose);
+  $('etf-close').addEventListener('click', onClose);
   for (const btn of document.querySelectorAll('[data-speed]')) {
     btn.addEventListener('click', () => {
       document.querySelectorAll('[data-speed]').forEach((b) => b.classList.toggle('active', b === btn));
@@ -42,6 +53,11 @@ export function createUI({
   const renderStatus = () => {
     if (!lastStatus) {
       $('status').textContent = t('status.loading');
+      return;
+    }
+    if (lastView.planet?.id === 'etf' && etfMeta) {
+      $('status').textContent = t('status.etf', { date: etfMeta.asOf ?? '—' });
+      $('status').title = '';
       return;
     }
     const { result: { source, updatedAt, error }, keptPrevious } = lastStatus;
@@ -69,6 +85,11 @@ export function createUI({
     };
     $('view-title').textContent = titles[mode]();
     $('coin-strip').hidden = mode === 'solar';
+    const legend = LEGENDS[planet?.id] ?? LEGENDS.default;
+    for (const [id, key] of Object.entries(legend)) {
+      $(id).dataset.i18n = key;
+      $(id).textContent = t(key);
+    }
   };
 
   const renderCoin = () => {
@@ -88,6 +109,26 @@ export function createUI({
     $('coin-share').textContent = buyShare(coin);
     $('coin-trades').textContent = formatCount(coin.trades);
     $('coin-pair').textContent = t('card.pair', { pair: coin.pair });
+  };
+
+  /** ETF 資訊卡：資金流是 T+1 結算，最新一天還沒結算時顯示「尚未結算」 */
+  const renderEtf = () => {
+    if (!lastEtf) return;
+    const { coin, trend, tier } = lastEtf;
+    $('etf-rank').textContent = `#${coin.rank}`;
+    $('etf-ticker').textContent = coin.ticker;
+    $('etf-asset').textContent = coin.asset;
+    $('etf-tier').textContent = t(`tier.${tier}`);
+    $('etf-name').textContent = coin.exchange ? `${coin.name}・${coin.exchange}` : coin.name;
+    $('etf-inflow').textContent = coin.netInflow === null ? t('etf.unsettled') : formatSignedUsd(coin.netInflow);
+    $('etf-inflow').className = TREND_CLASS[trend];
+    $('etf-aum').textContent = formatUsd(coin.netAssets);
+    $('etf-traded').textContent = formatUsd(coin.valueTraded);
+    $('etf-cum').textContent = formatSignedUsd(coin.cumInflow);
+    $('etf-price').textContent = formatPrice(coin.price);
+    $('etf-premium').textContent = ratioPct(coin.premium);
+    $('etf-fee').textContent = feePct(coin.fee);
+    $('etf-source').textContent = t('etf.source', { date: coin.date ?? '—' });
   };
 
   const renderPark = () => {
@@ -145,23 +186,32 @@ export function createUI({
   const setView = (mode, planet, coin) => {
     lastView = { mode, planet, coin };
     renderView();
+    renderStatus();
+  };
+
+  const showCard = (id) => {
+    for (const card of CARD_IDS) $(card).hidden = card !== id;
   };
 
   const showCoin = (mapped) => {
     lastCoin = mapped;
     renderCoin();
-    $('park-card').hidden = true;
-    $('coin-card').hidden = false;
+    showCard('coin-card');
+  };
+
+  const showEtf = (mapped) => {
+    lastEtf = mapped;
+    renderEtf();
+    showCard('etf-card');
   };
 
   const showPark = () => {
     renderPark();
-    $('coin-card').hidden = true;
-    $('park-card').hidden = false;
+    showCard('park-card');
   };
 
-  /** 星球與店面視角底部的幣種列；手機上比直接點 3D 店面好按 */
-  const setCoins = (mappedList, currentId) => {
+  /** 星球與店面視角底部的店面列；手機上比直接點 3D 店面好按。park：這顆星球有沒有爆倉公園 */
+  const setCoins = (mappedList, currentId, { park = true } = {}) => {
     const parkBtn = document.createElement('button');
     parkBtn.type = 'button';
     parkBtn.className = 'park-btn';
@@ -172,18 +222,19 @@ export function createUI({
     parkLabel.textContent = t('park.strip');
     parkBtn.append('🌳', parkLabel);
     parkBtn.addEventListener('click', onPickPark);
-    $('coin-strip').replaceChildren(parkBtn, ...mappedList.map(({ coin, trend }, index) => {
+    const shopBtns = mappedList.map(({ coin, trend, sign }, index) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.dataset.coin = coin.id;
       btn.setAttribute('aria-current', String(coin.id === currentId));
       const change = document.createElement('small');
       change.className = TREND_CLASS[trend];
-      change.textContent = formatPct(coin.change24h);
+      change.textContent = sign.secondary;
       btn.append(coin.symbol, change);
       btn.addEventListener('click', () => onPickCoin(index));
       return btn;
-    }));
+    });
+    $('coin-strip').replaceChildren(...(park ? [parkBtn] : []), ...shopBtns);
   };
 
   const toast = (message) => {
@@ -200,6 +251,7 @@ export function createUI({
     renderStatus();
     renderView();
     renderCoin();
+    renderEtf();
     renderPark();
     renderTheme();
   };
@@ -212,12 +264,18 @@ export function createUI({
     setStatus,
     setView,
     showCoin,
+    showEtf,
     setCoins,
     setLanguage,
     hideCards() {
       lastCoin = null;
-      $('coin-card').hidden = true;
-      $('park-card').hidden = true;
+      lastEtf = null;
+      showCard(null);
+    },
+    /** ETF 資料的日期，在 ETF 星上顯示於左上狀態列 */
+    setEtfMeta(meta) {
+      etfMeta = meta;
+      renderStatus();
     },
     setParkData(liqs) {
       lastPark = liqs;

@@ -156,3 +156,23 @@ export function mapEtfTown(etfs) {
     };
   });
 }
+
+/** 部署時產生的 etf.json，跟網頁放在同一個網站（相對路徑，GitHub Pages 子路徑也能用） */
+export const ETF_DATA_URL = './data/etf.json';
+
+/** 讀取並驗證 etf.json；沒有檔案或格式不對時回傳 null，ETF 星維持上鎖 */
+export async function loadEtfDataset({ fetchImpl = fetch, url = ETF_DATA_URL } = {}) {
+  try {
+    const res = await fetchImpl(url, { cache: 'no-cache' });
+    if (!res.ok) {
+      console.warn(`[crypto-planet] ETF 資料無法取得（HTTP ${res.status}）`);
+      return null;
+    }
+    const data = validateEtfDataset(await res.json());
+    if (!data) console.warn('[crypto-planet] ETF 資料格式不正確');
+    return data;
+  } catch (err) {
+    console.warn('[crypto-planet] ETF 資料讀取失敗', err);
+    return null;
+  }
+}

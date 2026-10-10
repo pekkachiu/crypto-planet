@@ -50,6 +50,30 @@
   <p class="label" id="coin-pair"></p>
 </aside>
 
+<aside id="etf-card" class="panel" hidden aria-live="polite">
+  <button id="etf-close" class="close" type="button" data-i18n-aria="card.close">×</button>
+  <div class="coin-head">
+    <span id="etf-rank" class="label"></span>
+    <h2 id="etf-ticker"></h2>
+    <span id="etf-asset" class="asset-badge"></span>
+    <span id="etf-tier" class="tier-badge"></span>
+  </div>
+  <p id="etf-name" class="muted etf-name"></p>
+  <div class="coin-price">
+    <span class="label" data-i18n="etf.inflow"></span>
+    <span id="etf-inflow"></span>
+  </div>
+  <dl class="coin-stats">
+    <div><dt data-i18n="etf.aum"></dt><dd id="etf-aum"></dd></div>
+    <div><dt data-i18n="etf.traded"></dt><dd id="etf-traded"></dd></div>
+    <div><dt data-i18n="etf.cum"></dt><dd id="etf-cum"></dd></div>
+    <div><dt data-i18n="etf.price"></dt><dd id="etf-price"></dd></div>
+    <div><dt data-i18n="etf.premium"></dt><dd id="etf-premium"></dd></div>
+    <div><dt data-i18n="etf.fee"></dt><dd id="etf-fee"></dd></div>
+  </dl>
+  <p class="label" id="etf-source"></p>
+</aside>
+
 <aside id="park-card" class="panel" hidden aria-live="polite">
   <button id="park-close" class="close" type="button" data-i18n-aria="card.close">×</button>
   <div class="coin-head"><h2 data-i18n="park.name"></h2></div>
@@ -76,9 +100,9 @@
     <button type="button" data-speed="10">10×</button>
   </div>
   <p class="legend">
-    <span><i class="dot up"></i><span data-i18n="legend.buy"></span></span>
-    <span><i class="dot down"></i><span data-i18n="legend.sell"></span></span>
-    <span><i class="dot walker"></i><span data-i18n="legend.walkers"></span></span>
+    <span><i class="dot up"></i><span id="legend-buy" data-i18n="legend.buy"></span></span>
+    <span><i class="dot down"></i><span id="legend-sell" data-i18n="legend.sell"></span></span>
+    <span><i class="dot walker"></i><span id="legend-walkers" data-i18n="legend.walkers"></span></span>
   </p>
 </footer>
 

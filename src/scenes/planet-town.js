@@ -20,15 +20,12 @@ const BOB_HEIGHT = 0.03;
 const MAX_PER_SHOP = RANGES.pedestrians[1] + 2 * RANGES.queue[1] + 16;
 
 /**
- * 小鎮在球面上的所有廣場位置（單位法向量）：第 0 個在北極、是爆倉公園，其後是店面。
- * 固定用 TOP_N + 1 個點的排列，地形的廣場與店面不會因幣種數量變動而錯開。
+ * 小鎮在球面上的所有廣場位置（單位法向量）。有公園時第 0 個在北極、是爆倉公園，其後是店面；
+ * 沒有公園時全部都是店面。點數固定，地形的廣場與店面不會因數量變動而錯開。
  */
-export function townSpots() {
-  return capPoints(TOP_N + 1, CAP_MIN_Y);
+export function townSpots({ park = true } = {}) {
+  return capPoints(TOP_N + (park ? 1 : 0), CAP_MIN_Y);
 }
-
-const parkSpot = () => townSpots()[0];
-const shopSpots = (count) => townSpots().slice(1, 1 + count);
 
 const UP = new THREE.Vector3(0, 1, 0);
 const toV3 = ({ x, y, z }) => new THREE.Vector3(x, y, z);
@@ -65,22 +62,28 @@ function agentColor(agent) {
 
 const tagShop = (object, index) => object.traverse((o) => { o.userData.shopIndex = index; });
 
+/** 爆倉公園固定在北極，不隨幣種資料重建 */
+function addPark(planetGroup, radius, spot) {
+  const anchor = createAnchor(radius, spot);
+  const park = createPark(radius);
+  anchor.add(park.group);
+  park.group.traverse((o) => { o.userData.park = true; });
+  planetGroup.add(anchor);
+  return { anchor, park };
+}
+
 /**
- * 在星球表面蓋小鎮：每個幣種一棟依市值分級的建築、一面招牌、一組人潮模擬。
- * 所有物件都掛在 planetGroup 底下，星球移動時整座小鎮一起動。
+ * 在星球表面蓋小鎮：每個幣種（或 ETF）一棟依規模分級的建築、一面招牌、一組人潮模擬。
+ * 所有物件都掛在 planetGroup 底下，星球移動時整座小鎮一起動。park：是否在北極放爆倉公園。
  */
-export function createTown(planetGroup, radius) {
+export function createTown(planetGroup, radius, { park: withPark = true } = {}) {
   const root = new THREE.Group();
   planetGroup.add(root);
   let shops = [];
   let crowd = null;
-
-  // 爆倉公園固定在北極，不隨幣種資料重建
-  const parkAnchor = createAnchor(radius, parkSpot());
-  const park = createPark(radius);
-  parkAnchor.add(park.group);
-  park.group.traverse((o) => { o.userData.park = true; });
-  planetGroup.add(parkAnchor);
+  const spots = townSpots({ park: withPark });
+  const parkSite = withPark ? addPark(planetGroup, radius, spots[0]) : null;
+  const shopSpots = (count) => spots.slice(withPark ? 1 : 0).slice(0, count);
 
   const disposeAll = () => {
     shops.forEach((s) => { s.shop.dispose(); s.sign.dispose(); });
@@ -119,7 +122,7 @@ export function createTown(planetGroup, radius) {
       tagShop(s.shop.group, i);
       tagShop(s.sign.sprite, i);
       s.sign.sprite.position.y = s.shop.height + SIGN_GAP;
-      s.sign.draw(mapped.coin, mapped.trend, color);
+      s.sign.draw(mapped.sign, mapped.trend, color);
       if (s.sim) s.sim.update(mapped);
       else s.sim = createShopSim(mapped, createRng(i + 1));
     });
@@ -155,7 +158,7 @@ export function createTown(planetGroup, radius) {
    * 被星球擋住的背面物件不算。
    */
   const pick = (raycaster) => {
-    const targets = [park.group, ...shops.flatMap((s) => [s.shop.group, s.sign.sprite])];
+    const targets = [...(parkSite ? [parkSite.park.group] : []), ...shops.flatMap((s) => [s.shop.group, s.sign.sprite])];
     const hit = raycaster.intersectObjects(targets, true)[0];
     if (!hit) return null;
     planetGroup.getWorldPosition(sphere.center);
@@ -180,7 +183,7 @@ export function createTown(planetGroup, radius) {
     return { position, up: up.normalize(), south: south.normalize(), height };
   };
   const shopFrame = (index) => frameOf(shops[index].anchor, shops[index].shop.height);
-  const parkFrame = () => frameOf(parkAnchor, park.height);
+  const parkFrame = () => (parkSite ? frameOf(parkSite.anchor, parkSite.park.height) : null);
 
   return {
     root,
@@ -190,11 +193,12 @@ export function createTown(planetGroup, radius) {
     pick,
     shopFrame,
     parkFrame,
-    setLiquidations(liqs, t) { park.setData(liqs, t); },
-    redrawPark(t) { park.redraw(t); },
+    hasPark: withPark,
+    setLiquidations(liqs, t) { parkSite?.park.setData(liqs, t); },
+    redrawPark(t) { parkSite?.park.redraw(t); },
     /** 網頁字型載入完成後重畫招牌，避免先用備用字型畫好就一直停在那 */
     redrawSigns() {
-      for (const s of shops) if (s.mapped) s.sign.draw(s.mapped.coin, s.mapped.trend, s.color);
+      for (const s of shops) if (s.mapped) s.sign.draw(s.mapped.sign, s.mapped.trend, s.color);
     },
     mappedAt(index) { return shops[index]?.mapped ?? null; },
     indexOf(coinId) { return shops.findIndex((s) => s.mapped?.coin.id === coinId); },

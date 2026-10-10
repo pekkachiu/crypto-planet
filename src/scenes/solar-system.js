@@ -10,7 +10,14 @@ const STAR_COUNT = 2200;
 const STAR_SHELL = 900;
 /** 地形細分程度：主流星要能站人，細一點；其他星球遠看即可 */
 const DETAIL = { town: 26, other: 10 };
-const MAJOR_GREENS = ['#5fb36a', '#6fc07a', '#4fa35e', '#86c96f'];
+/** 有小鎮的星球：主流星是綠地，ETF 星是金黃色的秋天 */
+const TOWN_STYLES = {
+  major: { palette: EARTHY, greens: ['#5fb36a', '#6fc07a', '#4fa35e', '#86c96f'] },
+  etf: {
+    palette: { ...EARTHY, grass: '#d8c477', sand: '#f3e3b0', plaza: '#ece0c4' },
+    greens: ['#e0a63a', '#d98b2b', '#c9b14a', '#e8c25a'],
+  },
+};
 
 function atmosphere(radius, color) {
   const material = new THREE.ShaderMaterial({
@@ -97,8 +104,9 @@ function createPlanetBody(config, index, radius, townField) {
   const seed = 101 + index * 17;
   if (townField) {
     const group = new THREE.Group();
-    const mesh = createTerrainMesh({ radius, field: townField, palette: EARTHY, detail: DETAIL.town, seed });
-    group.add(mesh, createTrees({ radius, field: townField, seed, greens: MAJOR_GREENS }));
+    const style = TOWN_STYLES[config.id] ?? TOWN_STYLES.major;
+    const mesh = createTerrainMesh({ radius, field: townField, palette: style.palette, detail: DETAIL.town, seed });
+    group.add(mesh, createTrees({ radius, field: townField, seed, greens: style.greens }));
     return { body: group, mesh };
   }
   const field = createTerrainField({ seed, waterLevel: -0.05 });
@@ -110,17 +118,19 @@ function createPlanetBody(config, index, radius, townField) {
 
 /**
  * 太陽系：太陽、五顆低多邊形星球、軌道線與星空。
+ * available：這次實際能進入的星球（例如 ETF 資料沒載入就維持上鎖）。
  * @param {THREE.Scene} scene
- * @param {{radii: Record<string, number>, townFields: Record<string, Function>, t: Function}} opts
+ * @param {{radii: Record<string, number>, townFields: Record<string, Function>, available: Set<string>, t: Function}} opts
  */
-export function createSolarSystem(scene, { radii, townFields, t }) {
+export function createSolarSystem(scene, { radii, townFields, available, t }) {
   const ambient = new THREE.AmbientLight('#fffaf2', 0.55);
   const hemi = new THREE.HemisphereLight('#fff6ea', '#7d6d60', 0.6);
   const stars = starfield();
   const sun = createSun();
   scene.add(ambient, hemi, stars, sun.group);
 
-  const planets = new Map(PLANETS.map((config, i) => {
+  const planets = new Map(PLANETS.map((base, i) => {
+    const config = { ...base, enabled: base.enabled && available.has(base.id) };
     const radius = radii[config.id] ?? config.radius;
     const group = new THREE.Group();
     const { body, mesh } = createPlanetBody(config, i, radius, townFields[config.id]);

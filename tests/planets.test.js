@@ -8,8 +8,8 @@ describe('PLANETS', () => {
     expect(ids).toEqual(expect.arrayContaining(['major', 'meme', 'ai', 'layer1', 'etf']));
     expect(new Set(ids).size).toBe(ids.length);
   });
-  it('第一版只有主流星開放', () => {
-    expect(PLANETS.filter((p) => p.enabled).map((p) => p.id)).toEqual(['major']);
+  it('主流星與 ETF 星開放（ETF 星還要等資料載入成功才解鎖）', () => {
+    expect(PLANETS.filter((p) => p.enabled).map((p) => p.id)).toEqual(['major', 'etf']);
   });
   it('軌道半徑由內而外遞增，不會撞在一起', () => {
     const orbits = PLANETS.map((p) => p.orbit);

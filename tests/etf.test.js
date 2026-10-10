@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   toNumber, normalizeDate, parseSnapshot, parseSummary, buildEtfDataset, validateEtfDataset,
-  pickTopEtfs, mapEtfTown, ETF_ASSETS,
+  pickTopEtfs, mapEtfTown, ETF_ASSETS, loadEtfDataset, ETF_DATA_URL,
 } from '../src/data/etf.js';
+import { vi } from 'vitest';
 import { RANGES } from '../src/data/mapping.js';
 
 const NOW = Date.UTC(2026, 9, 10, 2);
@@ -164,5 +165,23 @@ describe('mapEtfTown', () => {
   });
   it('空陣列回傳空陣列', () => {
     expect(mapEtfTown([])).toEqual([]);
+  });
+});
+
+describe('loadEtfDataset', () => {
+  const dataset = () => buildEtfDataset({ funds: [fund()], totals: {}, now: NOW });
+  it('讀取同網站的 etf.json，不帶快取並驗證格式', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => dataset() }));
+    const data = await loadEtfDataset({ fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledWith(ETF_DATA_URL, { cache: 'no-cache' });
+    expect(ETF_DATA_URL).toBe('./data/etf.json');
+    expect(data.etfs[0].ticker).toBe('IBIT');
+  });
+  it('檔案不存在、格式錯誤或網路失敗時回傳 null', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await loadEtfDataset({ fetchImpl: async () => ({ ok: false, status: 404 }) })).toBeNull();
+    expect(await loadEtfDataset({ fetchImpl: async () => ({ ok: true, json: async () => ({ source: 'x' }) }) })).toBeNull();
+    expect(await loadEtfDataset({ fetchImpl: async () => { throw new Error('offline'); } })).toBeNull();
+    warn.mockRestore();
   });
 });

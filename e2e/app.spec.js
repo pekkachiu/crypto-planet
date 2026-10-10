@@ -5,7 +5,18 @@ import sample from '../src/data/sample.json' with { type: 'json' };
  * 攔截外部 API，讓測試不依賴網路：CoinGecko 回錯誤 → 改用內建範例資料。
  * OKX 回傳固定的爆倉資料：BTC 一筆多單爆倉 0.5 顆（50 張 × 0.01）@ 80,000＝$40K。
  */
-async function offline(page) {
+/** ETF 星的測試資料：IBIT 淨流入、GBTC 淨流出、ETHA 尚未結算（格式同 scripts/fetch-etf.mjs 的輸出） */
+const etfFund = (ticker, asset, netAssets, netInflow) => ({
+  ticker, name: `${ticker} Trust`, exchange: 'NASDAQ', asset, date: '2026-10-08', netInflow, cumInflow: 1e10,
+  netAssets, valueTraded: netAssets / 40, price: 40, premium: -0.0004, fee: 0.0025,
+});
+const ETF_FIXTURE = {
+  source: 'sosovalue', updatedAt: '2026-10-09T01:30:00.000Z', asOf: '2026-10-08', totals: {},
+  etfs: [etfFund('IBIT', 'BTC', 8e10, 4.012e8), etfFund('GBTC', 'BTC', 1.5e10, -1.2e8), etfFund('ETHA', 'ETH', 1e10, null)],
+};
+
+async function offline(page, { etf = ETF_FIXTURE } = {}) {
+  await page.route('**/data/etf.json', (route) => (etf ? route.fulfill({ json: etf }) : route.fulfill({ status: 404, body: '' })));
   await page.route('https://api.coingecko.com/**', (route) => route.fulfill({ status: 503, body: '' }));
   await page.route('https://data-api.binance.vision/**', (route) => route.fulfill({ status: 503, body: '' }));
   await page.route('https://www.okx.com/api/v5/public/instruments**', (route) => route.fulfill({
@@ -38,8 +49,8 @@ test('API 失敗時顯示範例資料，太陽系五顆星球都有標籤', asyn
 
 test('點未開放的星球會顯示即將開放提示', async ({ page }) => {
   await openSolar(page);
-  await page.locator('[data-planet="etf"]').dispatchEvent('click');
-  await expect(page.locator('#toast')).toContainText('ETF 星即將開放');
+  await page.locator('[data-planet="meme"]').dispatchEvent('click');
+  await expect(page.locator('#toast')).toContainText('迷因星即將開放');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'solar');
 });
 
@@ -168,4 +179,61 @@ test('晚上打開預設是夜晚模式', async ({ browser }) => {
   await openSolar(page);
   await expect(page.locator('body')).toHaveAttribute('data-theme', 'night');
   await context.close();
+});
+
+test('ETF 星：店面是 ETF、隊伍代表資金流，資訊卡顯示淨流入與資料日期', async ({ page }) => {
+  await openSolar(page);
+  await page.locator('[data-planet="etf"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await expect(page.locator('#status')).toHaveText('ETF 資料・SoSoValue・2026-10-08');
+  await expect(page.locator('#legend-buy')).toHaveText('右側隊伍＝淨流入');
+  // ETF 星沒有爆倉公園
+  await expect(page.locator('#coin-strip [data-park]')).toHaveCount(0);
+  await expect(page.locator('#coin-strip [data-coin]')).toHaveCount(3);
+  await expect(page.locator('#coin-strip [data-coin="etf:GBTC"] small')).toHaveText('-$120M');
+
+  await page.locator('#coin-strip [data-coin="etf:IBIT"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'shop', { timeout: 10_000 });
+  await expect(page.locator('#etf-card')).toBeVisible();
+  await expect(page.locator('#coin-card')).toBeHidden();
+  await expect(page.locator('#etf-ticker')).toHaveText('IBIT');
+  await expect(page.locator('#etf-asset')).toHaveText('BTC');
+  await expect(page.locator('#etf-inflow')).toHaveText('+$401M');
+  await expect(page.locator('#etf-inflow')).toHaveClass('up');
+  await expect(page.locator('#etf-aum')).toHaveText('$80.0B');
+  await expect(page.locator('#etf-source')).toContainText('2026-10-08');
+
+  await page.locator('#coin-strip [data-coin="etf:ETHA"]').click();
+  await expect(page.locator('#etf-inflow')).toHaveText('尚未結算', { timeout: 10_000 });
+
+  // 回到太陽系後狀態列與圖例恢復成主流星的內容
+  await page.locator('#back').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await page.locator('#back').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'solar', { timeout: 10_000 });
+  await expect(page.locator('#status')).toContainText('範例資料');
+  await expect(page.locator('#legend-buy')).toHaveText('右側隊伍＝主動買入');
+});
+
+test('ETF 資料讀不到時 ETF 星維持上鎖，主流星照常', async ({ page }) => {
+  await offline(page, { etf: null });
+  await openSolar(page);
+  await page.locator('[data-planet="etf"]').dispatchEvent('click');
+  await expect(page.locator('#toast')).toHaveText('ETF 資料暫時無法取得');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'solar');
+  await page.locator('[data-planet="major"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+});
+
+test('ETF 資料被竄改成惡意字串時不會執行，只當成純文字或被丟掉', async ({ page }) => {
+  const evil = { ...ETF_FIXTURE, etfs: [{ ...ETF_FIXTURE.etfs[0], name: '<img src=x onerror="window.__pwned=1">' }, { ...ETF_FIXTURE.etfs[1], ticker: '<b>X</b>' }] };
+  await offline(page, { etf: evil });
+  await openSolar(page);
+  await page.locator('[data-planet="etf"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await expect(page.locator('#coin-strip [data-coin]')).toHaveCount(1);
+  await page.locator('#coin-strip [data-coin="etf:IBIT"]').click();
+  await expect(page.locator('#etf-name')).toContainText('<img src=x');
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  await expect(page.locator('#etf-card img')).toHaveCount(0);
 });
