@@ -4,8 +4,8 @@ import sample from './sample-liquidations.json' with { type: 'json' };
 export const DAY_MS = 24 * 3600 * 1000;
 export const OKX_LIQ_URL = 'https://www.okx.com/api/v5/public/liquidation-orders';
 export const OKX_INSTRUMENTS_URL = 'https://www.okx.com/api/v5/public/instruments?instType=SWAP';
-/** BTC 這種爆倉多的幣，一頁 100 筆不到 24 小時；最多往前翻幾頁 */
-const MAX_PAGES = 12;
+/** BTC 這種爆倉多的幣，一頁 100 筆不到 24 小時；最多往前翻幾頁，超過就標記 truncated */
+const MAX_PAGES = 30;
 const PAGE_LIMIT = 100;
 
 const num = (v) => (typeof v === 'string' || typeof v === 'number' ? Number(v) : NaN);
@@ -54,39 +54,55 @@ async function okxData(url, options) {
   return body.data ?? [];
 }
 
-/** 一個標的往前翻頁，直到涵蓋 24 小時或沒有更早的資料 */
-export async function fetchUnderlying(uly, { fetchImpl = fetch, now = Date.now() } = {}) {
+/**
+ * 一個標的往前翻頁，直到涵蓋 24 小時或沒有更早的資料。
+ * @returns {Promise<{details: object[], truncated: boolean}>} truncated：翻到上限仍未涵蓋 24 小時（總額會低估）
+ */
+export async function fetchUnderlying(uly, { fetchImpl = fetch, now = Date.now(), maxPages = MAX_PAGES } = {}) {
   const all = [];
   let after = null;
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const url = new URL(OKX_LIQ_URL);
     url.search = new URLSearchParams({
       instType: 'SWAP', uly, state: 'filled', limit: String(PAGE_LIMIT), ...(after ? { after } : {}),
     }).toString();
     const details = (await okxData(url.toString(), { fetchImpl }))[0]?.details ?? [];
-    if (details.length === 0) break;
+    if (details.length === 0) return { details: all, truncated: false };
     all.push(...details);
-    const oldest = Math.min(...details.map((d) => num(d.ts)));
-    if (oldest < now - DAY_MS) break;
+    const stamps = details.map((d) => num(d.ts)).filter(Number.isFinite);
+    if (stamps.length === 0) return { details: all, truncated: false };
+    const oldest = Math.min(...stamps);
+    if (oldest < now - DAY_MS) return { details: all, truncated: false };
     after = String(oldest);
   }
-  return all;
+  return { details: all, truncated: true };
 }
 
 /**
  * OKX 上這些幣的 USDT 永續合約，過去 24 小時的多空爆倉總額。
- * 失敗時改用內建範例資料。
+ * 個別幣種失敗時加總成功的幣並標記 partial；全部失敗才改用內建範例資料。
  */
 export async function loadLiquidations(coins, { fetchImpl = fetch, now = Date.now() } = {}) {
   try {
     const ctVals = parseCtVals(await okxData(OKX_INSTRUMENTS_URL, { fetchImpl }));
     const listed = coins.filter((c) => ctVals.has(underlying(c.symbol)));
     // 各幣同時抓（每幣內部依序翻頁），同時最多約 10 個請求，在 OKX 每 2 秒 40 次的限流內
-    const perCoin = await Promise.all(listed.map(async (coin) => {
+    const settled = await Promise.allSettled(listed.map(async (coin) => {
       const uly = underlying(coin.symbol);
-      return { symbol: coin.symbol, ctVal: ctVals.get(uly), details: await fetchUnderlying(uly, { fetchImpl, now }) };
+      const { details, truncated } = await fetchUnderlying(uly, { fetchImpl, now });
+      return { symbol: coin.symbol, ctVal: ctVals.get(uly), details, truncated };
     }));
-    return { source: 'okx', updatedAt: new Date(now).toISOString(), ...summarize(perCoin, now) };
+    const perCoin = settled.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+    if (perCoin.length === 0) {
+      throw settled.find((r) => r.status === 'rejected')?.reason ?? new Error('OKX 沒有任何可用的幣種');
+    }
+    return {
+      source: 'okx',
+      updatedAt: new Date(now).toISOString(),
+      partial: perCoin.length < listed.length,
+      truncated: perCoin.some((c) => c.truncated),
+      ...summarize(perCoin, now),
+    };
   } catch (err) {
     return { ...sample, source: 'sample', error: err.message };
   }

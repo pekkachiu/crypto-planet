@@ -68,9 +68,10 @@ describe('fetchUnderlying', () => {
       urls.push(url);
       return ok([{ details: pages[urls.length - 1] }]);
     });
-    const details = await fetchUnderlying('BTC-USDT', { fetchImpl, now: NOW });
+    const { details, truncated } = await fetchUnderlying('BTC-USDT', { fetchImpl, now: NOW });
     expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(details).toHaveLength(4);
+    expect(truncated).toBe(false);
     expect(new URL(urls[1]).searchParams.get('after')).toBe(String(NOW - 5 * 3600e3));
   });
   it('OKX 回傳錯誤碼時丟出錯誤', async () => {
@@ -79,7 +80,19 @@ describe('fetchUnderlying', () => {
   });
   it('沒有任何爆倉時回傳空陣列', async () => {
     const fetchImpl = async () => ok([]);
-    expect(await fetchUnderlying('TRX-USDT', { fetchImpl, now: NOW })).toEqual([]);
+    expect(await fetchUnderlying('TRX-USDT', { fetchImpl, now: NOW })).toEqual({ details: [], truncated: false });
+  });
+  it('翻到頁數上限仍未涵蓋 24 小時時標記為 truncated', async () => {
+    const fetchImpl = async () => ok([{ details: [detail({ ts: String(NOW - 1000) })] }]);
+    const result = await fetchUnderlying('BTC-USDT', { fetchImpl, now: NOW, maxPages: 3 });
+    expect(result.details).toHaveLength(3);
+    expect(result.truncated).toBe(true);
+  });
+  it('時間戳不是數字時停止翻頁，不會送出 after=NaN', async () => {
+    const urls = [];
+    const fetchImpl = async (url) => { urls.push(url); return ok([{ details: [detail({ ts: 'oops' })] }]); };
+    await fetchUnderlying('BTC-USDT', { fetchImpl, now: NOW });
+    expect(urls).toHaveLength(1);
   });
 });
 
@@ -94,6 +107,29 @@ describe('loadLiquidations', () => {
     const result = await loadLiquidations(coins, { fetchImpl, now: NOW });
     expect(result).toMatchObject({ source: 'okx', long: 1600, short: 0, byCoin: [{ symbol: 'BTC', long: 1600, short: 0 }] });
     expect(fetchImpl.mock.calls.some(([u]) => u.includes('XMR'))).toBe(false);
+  });
+  it('部分幣種失敗時，加總成功的幣並標記 partial', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      if (url.includes('instruments')) {
+        return ok([
+          { instId: 'BTC-USDT-SWAP', uly: 'BTC-USDT', ctVal: '0.01', ctValCcy: 'BTC' },
+          { instId: 'ETH-USDT-SWAP', uly: 'ETH-USDT', ctVal: '0.1', ctValCcy: 'ETH' },
+        ]);
+      }
+      if (url.includes('ETH-USDT')) return { ok: false, status: 429 };
+      const firstPage = !new URL(url).searchParams.has('after');
+      return ok([{ details: firstPage ? [detail()] : [] }]);
+    });
+    const result = await loadLiquidations([{ symbol: 'BTC' }, { symbol: 'ETH' }], { fetchImpl, now: NOW });
+    expect(result).toMatchObject({ source: 'okx', long: 1600, partial: true });
+    expect(result.byCoin.map((c) => c.symbol)).toEqual(['BTC']);
+  });
+  it('所有幣種都失敗時改用範例資料', async () => {
+    const fetchImpl = async (url) => (url.includes('instruments')
+      ? ok([{ instId: 'BTC-USDT-SWAP', uly: 'BTC-USDT', ctVal: '0.01', ctValCcy: 'BTC' }])
+      : { ok: false, status: 503 });
+    const result = await loadLiquidations([{ symbol: 'BTC' }], { fetchImpl, now: NOW });
+    expect(result.source).toBe('sample');
   });
   it('失敗時改用範例資料並附上錯誤', async () => {
     const fetchImpl = async () => ({ ok: false, status: 503 });

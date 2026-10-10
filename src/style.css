@@ -157,6 +157,9 @@ body {
   }
   .coin-head h2 { font-size: 20px; }
   #coin-pair { display: none; }
+  /* 公園資訊卡內容較多：限制高度可捲動，並隱藏圖例，避免蓋住整個公園 */
+  #park-card { max-height: 38vh; overflow-y: auto; }
+  #park-card .label[data-i18n="park.legend"] { display: none; }
   #coin-price { font-size: 20px; }
   .coin-stats { gap: 6px 10px; margin-bottom: 8px; }
   .coin-stats dt { font-size: 10px; }

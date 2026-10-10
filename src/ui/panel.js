@@ -114,8 +114,9 @@ export function createUI({
       li.append(c.symbol, longEl, shortEl);
       return li;
     }));
+    const notes = [lastPark.partial && t('park.partial'), lastPark.truncated && t('park.truncated')].filter(Boolean);
     $('park-source').textContent = source === 'okx'
-      ? t('park.source', { time: timeText(updatedAt) })
+      ? [t('park.source', { time: timeText(updatedAt) }), ...notes].join('・')
       : t('park.sample');
   };
 

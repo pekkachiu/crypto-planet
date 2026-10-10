@@ -353,12 +353,16 @@ function applyData(coins) {
 }
 
 let refreshingLiqs = false;
+let hasRealLiqs = false;
 
 async function refreshLiquidations() {
   if (refreshingLiqs || document.hidden || townData.length === 0) return;
   refreshingLiqs = true;
   try {
     const liqs = await loadLiquidations(townData.map((m) => m.coin));
+    // 已經有真實資料時，暫時失敗不要用範例資料蓋掉
+    if (liqs.source !== 'okx' && hasRealLiqs) return;
+    hasRealLiqs = hasRealLiqs || liqs.source === 'okx';
     town.setLiquidations(liqs, t);
     ui.setParkData(liqs);
   } catch (err) {
@@ -407,6 +411,12 @@ async function start() {
   applyLook(nightK);
   refreshLiquidations();
   setInterval(refreshLiquidations, LIQ_REFRESH_MS);
+  // 背景分頁不更新；切回來時立刻補一次，不必等下一輪
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    refresh();
+    refreshLiquidations();
+  });
   renderer.setAnimationLoop(frame);
 }
 
