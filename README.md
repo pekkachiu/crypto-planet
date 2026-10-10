@@ -1,5 +1,7 @@
 # 加密星球小鎮（Crypto Planet Town）
 
+[English](README.en.md) · **繁體中文**
+
 把加密貨幣市場畫成一個低多邊形的小太陽系：**每個分類是一顆星球，每個幣種是星球上的一間店**。哪家店門口排長隊、哪裡人潮最多，一眼就看得出市場的錢往哪裡跑。
 
 **👉 [打開網站](https://pekkachiu.github.io/crypto-planet/)**　支援手機、中英文切換（右上角 EN／中）
