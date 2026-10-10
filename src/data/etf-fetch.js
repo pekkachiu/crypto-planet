@@ -1,4 +1,4 @@
-import { ETF_ASSETS, TICKER_RE, parseSnapshot, parseSummary, buildEtfDataset } from './etf.js';
+import { ETF_ASSETS, REQUIRED_ASSETS, parseTickers, parseSummary, buildEtfDataset } from './etf.js';
 
 /**
  * 從 SoSoValue 官方 API 抓 ETF 資料。只在 GitHub Actions（scripts/fetch-etf.mjs）執行，
@@ -60,9 +60,8 @@ function createClient({ apiKey, fetchImpl, sleep, minIntervalMs, clock }) {
 }
 
 /**
- * 依序抓：每個資產的 ETF 清單與每日總計，再抓每檔 ETF 的最新已結算快照。
- * 單一基金失敗（請求錯誤或資料無法解析）就略過；超過一半失敗、或某個資產一檔都沒有，
- * 代表 API 有狀況，整體失敗讓部署沿用上一次的資料，不發佈殘缺的資料。
+ * 每個幣種抓兩個請求：ETF 清單（有幾檔、代號）與所有 ETF 的每日總計。
+ * BTC、ETH 抓不到就整體失敗，讓部署沿用上一次的資料；其他幣種抓不到只略過那一棟。
  */
 export async function fetchEtfDataset({
   apiKey, fetchImpl = fetch, sleep = realSleep, now = Date.now(),
@@ -71,33 +70,19 @@ export async function fetchEtfDataset({
   if (typeof apiKey !== 'string' || apiKey.trim() === '') throw new Error('SOSOVALUE_API_KEY 未設定');
   const request = createClient({ apiKey: apiKey.trim(), fetchImpl, sleep, minIntervalMs, clock });
 
-  const totals = {};
-  const listings = [];
+  const groups = [];
   for (const asset of assets) {
-    const list = await request('/etfs', { symbol: asset, country_code: COUNTRY });
-    totals[asset] = parseSummary(await request('/etfs/summary-history', { symbol: asset, country_code: COUNTRY, limit: SUMMARY_LIMIT }));
-    for (const item of Array.isArray(list) ? list : []) {
-      const ticker = typeof item?.ticker === 'string' ? item.ticker.trim().toUpperCase() : '';
-      if (TICKER_RE.test(ticker)) listings.push({ ticker, asset, name: item.name, exchange: item.exchange });
-    }
-  }
-
-  const funds = [];
-  let failed = 0;
-  for (const { ticker, ...meta } of listings) {
     try {
-      const fund = parseSnapshot(await request(`/etfs/${encodeURIComponent(ticker)}/market-snapshot`), meta);
-      if (!fund) throw new Error('快照缺少必要欄位');
-      funds.push(fund);
+      const params = { symbol: asset, country_code: COUNTRY };
+      const tickers = parseTickers(await request('/etfs', params));
+      const summary = parseSummary(await request('/etfs/summary-history', { ...params, limit: SUMMARY_LIMIT }));
+      if (tickers.length === 0) throw new Error('沒有 ETF');
+      if (!summary) throw new Error('沒有已結算的總計');
+      groups.push({ asset, ...summary, fundCount: tickers.length, tickers });
     } catch (err) {
-      failed += 1;
-      console.warn(`[etf] ${ticker} 略過：${err.message}`);
+      if (REQUIRED_ASSETS.includes(asset)) throw new Error(`${asset} ETF 資料抓取失敗：${err.message}`);
+      console.warn(`[etf] ${asset} 略過：${err.message}`);
     }
   }
-  if (listings.length === 0 || failed * 2 > listings.length) {
-    throw new Error(`ETF 快照失敗 ${failed}/${listings.length}`);
-  }
-  const missing = assets.filter((asset) => !funds.some((f) => f.asset === asset));
-  if (missing.length > 0) throw new Error(`沒有抓到 ${missing.join('、')} 的 ETF`);
-  return buildEtfDataset({ funds, totals, now });
+  return buildEtfDataset({ groups, now });
 }

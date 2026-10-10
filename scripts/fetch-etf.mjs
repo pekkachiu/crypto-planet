@@ -29,8 +29,8 @@ try {
   if (!validateEtfDataset(dataset)) throw new Error('抓到的資料沒有通過格式檢查');
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, `${JSON.stringify(dataset)}\n`);
-  const counts = dataset.etfs.reduce((acc, e) => ({ ...acc, [e.asset]: (acc[e.asset] ?? 0) + 1 }), {});
-  console.log(`[etf] 已寫入 ${out}：${JSON.stringify(counts)}，資料日期 ${dataset.asOf}`);
+  const counts = Object.fromEntries(dataset.assets.map((a) => [a.asset, a.fundCount]));
+  console.log(`[etf] 已寫入 ${out}：各幣種 ETF 檔數 ${JSON.stringify(counts)}，資料日期 ${dataset.asOf}`);
 } catch (err) {
   console.error(`[etf] 失敗：${err.message}`);
   process.exit(1);

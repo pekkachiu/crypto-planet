@@ -21,10 +21,10 @@ const MAX_PER_SHOP = RANGES.pedestrians[1] + 2 * RANGES.queue[1] + 16;
 
 /**
  * 小鎮在球面上的所有廣場位置（單位法向量）。有公園時第 0 個在北極、是爆倉公園，其後是店面；
- * 沒有公園時全部都是店面。點數固定，地形的廣場與店面不會因數量變動而錯開。
+ * 沒有公園時全部都是店面。count 是店面數上限，點數固定，地形的廣場與店面不會因數量變動而錯開。
  */
-export function townSpots({ park = true } = {}) {
-  return capPoints(TOP_N + (park ? 1 : 0), CAP_MIN_Y);
+export function townSpots({ park = true, count = TOP_N } = {}) {
+  return capPoints(count + (park ? 1 : 0), CAP_MIN_Y);
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -74,14 +74,14 @@ function addPark(planetGroup, radius, spot) {
 
 /**
  * 在星球表面蓋小鎮：每個幣種（或 ETF）一棟依規模分級的建築、一面招牌、一組人潮模擬。
- * 所有物件都掛在 planetGroup 底下，星球移動時整座小鎮一起動。park：是否在北極放爆倉公園。
+ * 所有物件都掛在 planetGroup 底下，星球移動時整座小鎮一起動。park：是否在北極放爆倉公園；count：店面數上限。
  */
-export function createTown(planetGroup, radius, { park: withPark = true } = {}) {
+export function createTown(planetGroup, radius, { park: withPark = true, count = TOP_N } = {}) {
   const root = new THREE.Group();
   planetGroup.add(root);
   let shops = [];
   let crowd = null;
-  const spots = townSpots({ park: withPark });
+  const spots = townSpots({ park: withPark, count });
   const parkSite = withPark ? addPark(planetGroup, radius, spots[0]) : null;
   const shopSpots = (count) => spots.slice(withPark ? 1 : 0).slice(0, count);
 

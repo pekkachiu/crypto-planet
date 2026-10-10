@@ -11,8 +11,8 @@ const LEGENDS = {
   etf: { 'legend-buy': 'legend.etf.buy', 'legend-sell': 'legend.etf.sell', 'legend-walkers': 'legend.etf.walkers' },
 };
 const CARD_IDS = ['coin-card', 'park-card', 'etf-card'];
-const ratioPct = (v) => (Number.isFinite(v) ? formatPct(v * 100) : '—');
-const feePct = (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(2)}%` : '—');
+/** 資訊卡上最多列出幾檔 ETF 代號 */
+const MAX_LISTED_TICKERS = 6;
 
 /**
  * 介面層：只用 textContent 寫入外部 API 的資料，避免 XSS。
@@ -111,23 +111,21 @@ export function createUI({
     $('coin-pair').textContent = t('card.pair', { pair: coin.pair });
   };
 
-  /** ETF 資訊卡：資金流是 T+1 結算，最新一天還沒結算時顯示「尚未結算」 */
+  /** ETF 資訊卡（一個幣種所有現貨 ETF 的加總）：資金流是 T+1 結算，還沒結算時顯示「尚未結算」 */
   const renderEtf = () => {
     if (!lastEtf) return;
     const { coin, trend, tier } = lastEtf;
+    const more = coin.tickers.length > MAX_LISTED_TICKERS ? '…' : '';
     $('etf-rank').textContent = `#${coin.rank}`;
-    $('etf-ticker').textContent = coin.ticker;
-    $('etf-asset').textContent = coin.asset;
+    $('etf-asset').textContent = t('etf.assetTitle', { asset: coin.asset });
+    $('etf-count').textContent = t('etf.count', { n: coin.fundCount ?? coin.tickers.length });
     $('etf-tier').textContent = t(`tier.${tier}`);
-    $('etf-name').textContent = coin.exchange ? `${coin.name}・${coin.exchange}` : coin.name;
+    $('etf-tickers').textContent = `${coin.tickers.slice(0, MAX_LISTED_TICKERS).join('・')}${more}`;
     $('etf-inflow').textContent = coin.netInflow === null ? t('etf.unsettled') : formatSignedUsd(coin.netInflow);
     $('etf-inflow').className = TREND_CLASS[trend];
     $('etf-aum').textContent = formatUsd(coin.netAssets);
     $('etf-traded').textContent = formatUsd(coin.valueTraded);
     $('etf-cum').textContent = formatSignedUsd(coin.cumInflow);
-    $('etf-price').textContent = formatPrice(coin.price);
-    $('etf-premium').textContent = ratioPct(coin.premium);
-    $('etf-fee').textContent = feePct(coin.fee);
     $('etf-source').textContent = t('etf.source', { date: coin.date ?? '—' });
   };
 
