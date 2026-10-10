@@ -4,28 +4,21 @@ import { fetchEtfDataset, SOSO_BASE } from '../src/data/etf-fetch.js';
 const KEY = 'test-key-123';
 const NOW = Date.UTC(2026, 9, 10, 2);
 const ok = (data) => ({ ok: true, status: 200, json: async () => ({ code: 0, message: 'success', data }) });
-const snap = (ticker, netAssets, netInflow = 1e7) => ({
-  date: '2026-10-08', ticker, net_inflow: netInflow, cum_inflow: 1e9, net_assets: netAssets,
-  mkt_price: 40, prem_dsc: 0, value_traded: 1e8, volume: 1e6, sponsor_fee: 0.0025,
-});
-const LISTS = {
-  BTC: [{ ticker: 'IBIT', name: 'iShares Bitcoin Trust', exchange: 'NASDAQ' }, { ticker: 'FBTC', name: 'Fidelity', exchange: 'CBOE' }],
-  ETH: [{ ticker: 'ETHA', name: 'iShares Ethereum Trust', exchange: 'NASDAQ' }],
-};
-const SNAPS = { IBIT: snap('IBIT', 8e10), FBTC: snap('FBTC', 2e10), ETHA: snap('ETHA', 1e10) };
-const SUMMARY = [{ date: '2026-10-08', total_net_inflow: '1.5e8', total_value_traded: '3e9', total_net_assets: '1.2e11', cum_net_inflow: '6e10' }];
+const fail = (status = 500) => () => ({ ok: false, status, json: async () => ({}) });
+const summary = (assets) => [{ date: '2026-10-09', total_net_inflow: '1.5e8', total_value_traded: '3e9', total_net_assets: String(assets), cum_net_inflow: '6e10' }];
+const LISTS = { BTC: ['IBIT', 'FBTC'], ETH: ['ETHA'], SOL: ['BSOL'], XRP: ['XRPZ'] };
+const ASSETS = { BTC: 1e11, ETH: 1.5e10, SOL: 6e8, XRP: 4e8 };
 
+/** overrides：key 是「資產/端點」，例如 'SOL/summary-history' */
 function api(overrides = {}) {
   return vi.fn(async (url) => {
     const u = new URL(url);
-    for (const [pattern, handler] of Object.entries(overrides)) {
-      const response = u.pathname.includes(pattern) ? handler(u) : null;
-      if (response) return response;
-    }
-    if (u.pathname.endsWith('/etfs')) return ok(LISTS[u.searchParams.get('symbol')]);
-    if (u.pathname.endsWith('/summary-history')) return ok(SUMMARY);
-    const ticker = u.pathname.match(/\/etfs\/([^/]+)\/market-snapshot$/)?.[1];
-    return ok(SNAPS[ticker]);
+    const asset = u.searchParams.get('symbol');
+    const endpoint = u.pathname.endsWith('/etfs') ? 'list' : 'summary-history';
+    const override = overrides[`${asset}/${endpoint}`];
+    if (override) return override(u);
+    if (endpoint === 'list') return ok(LISTS[asset].map((ticker) => ({ ticker, name: `${ticker} Trust`, exchange: 'NASDAQ' })));
+    return ok(summary(ASSETS[asset]));
   });
 }
 const sleep = vi.fn(async () => {});
@@ -38,107 +31,75 @@ describe('fetchEtfDataset', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('每個請求都用 x-soso-api-key header 帶 Key，不放在網址裡', async () => {
+  it('每個請求都用 header 帶 Key、不放網址，也不跟隨重新導向', async () => {
     const fetchImpl = api();
     await run(fetchImpl);
     for (const [url, init] of fetchImpl.mock.calls) {
-      expect(url.startsWith(SOSO_BASE)).toBe(true);
+      expect(url.startsWith(`${SOSO_BASE}/etfs`)).toBe(true);
       expect(url).not.toContain(KEY);
       expect(init.headers['x-soso-api-key']).toBe(KEY);
+      expect(init.redirect).toBe('error');
     }
   });
 
-  it('抓 BTC 與 ETH 的美國 ETF 清單、每檔快照與類別總計', async () => {
-    const data = await run(api());
-    expect(data.etfs.map((e) => [e.ticker, e.asset])).toEqual([['IBIT', 'BTC'], ['FBTC', 'BTC'], ['ETHA', 'ETH']]);
-    expect(data.totals.BTC.netInflow).toBe(1.5e8);
-    expect(data.asOf).toBe('2026-10-08');
-    expect(data.updatedAt).toBe(new Date(NOW).toISOString());
-  });
-
-  it('清單裡格式不對的代號（包含 . 與 ..）不會被拼進網址', async () => {
-    const bad = [{ ticker: '../../admin' }, { ticker: '..' }, { ticker: '.' }];
-    const fetchImpl = api({ '/etfs': (u) => (u.pathname.endsWith('/etfs') ? ok([...bad, ...LISTS[u.searchParams.get('symbol')]]) : null) });
+  it('每個幣種只抓清單與每日總計（4 種 × 2 = 8 個請求），整理成一棟一幣種', async () => {
+    const fetchImpl = api();
     const data = await run(fetchImpl);
-    expect(fetchImpl.mock.calls.some(([url]) => url.includes('admin') || url.includes('/etfs/./') || url.includes('/etfs/../'))).toBe(false);
-    expect(data.etfs).toHaveLength(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
+    expect(data.assets.map((a) => [a.asset, a.fundCount])).toEqual([['BTC', 2], ['ETH', 1], ['SOL', 1], ['XRP', 1]]);
+    expect(data.assets[0]).toMatchObject({ netAssets: 1e11, netInflow: 1.5e8, tickers: ['IBIT', 'FBTC'] });
+    expect(data.asOf).toBe('2026-10-09');
   });
 
-  it('單一基金失敗時略過，其他照常', async () => {
-    const data = await run(api({ '/FBTC/': () => ({ ok: false, status: 500, json: async () => ({}) }) }));
-    expect(data.etfs.map((e) => e.ticker)).toEqual(['IBIT', 'ETHA']);
+  it('SOL、XRP 抓不到時略過那一棟，其他照常', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const data = await run(api({ 'SOL/summary-history': fail(), 'XRP/list': () => ok([]) }));
+    expect(data.assets.map((a) => a.asset)).toEqual(['BTC', 'ETH']);
+    warn.mockRestore();
   });
 
-  it('超過一半的基金失敗時整體失敗，保留上一次的資料', async () => {
-    const fail = () => ({ ok: false, status: 500, json: async () => ({}) });
-    await expect(run(api({ '/IBIT/': fail, '/FBTC/': fail }))).rejects.toThrow('2/3');
+  it('BTC 或 ETH 抓不到時整體失敗，讓部署沿用上一次的資料', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await expect(run(api({ 'ETH/summary-history': () => ok([]) }))).rejects.toThrow('ETH');
+    await expect(run(api({ 'BTC/list': fail(401) }))).rejects.toThrow('BTC');
+    warn.mockRestore();
   });
 
-  it('被限流（429）時依 retry_after 等待後重試', async () => {
-    let first = true;
-    const fetchImpl = api({
-      '/IBIT/': () => {
-        if (!first) return ok(SNAPS.IBIT);
+  it('被限流（429）時依 retry_after 或 Retry-After 等待後重試，最多等 120 秒', async () => {
+    const limited = (body, headers = {}) => {
+      let first = true;
+      return () => {
+        if (!first) return ok(summary(1e11));
         first = false;
-        return { ok: false, status: 429, json: async () => ({ code: 42901, details: { retry_after: 7 } }) };
-      },
-    });
+        return { ok: false, status: 429, headers: new Headers(headers), json: async () => body };
+      };
+    };
     sleep.mockClear();
-    const data = await run(fetchImpl);
+    await run(api({ 'BTC/summary-history': limited({ details: { retry_after: 7 } }) }));
     expect(sleep).toHaveBeenCalledWith(7000);
-    expect(data.etfs).toHaveLength(3);
+    sleep.mockClear();
+    await run(api({ 'BTC/summary-history': limited({ details: { retry_after: 99999 } }) }));
+    expect(sleep).toHaveBeenCalledWith(120_000);
+    sleep.mockClear();
+    await run(api({ 'BTC/summary-history': limited({}, { 'Retry-After': '9' }) }));
+    expect(sleep).toHaveBeenCalledWith(9000);
   });
 
   it('請求之間至少間隔 minIntervalMs，避免超過每分鐘 20 次', async () => {
     sleep.mockClear();
     let clock = 0;
     await fetchEtfDataset({ apiKey: KEY, fetchImpl: api(), sleep: async (ms) => { clock += ms; sleep(ms); }, now: NOW, minIntervalMs: 3100, clock: () => clock });
-    // 7 個請求：2 份清單＋2 份總計＋3 份快照，第一個之後每個都要等
-    expect(sleep.mock.calls.filter(([ms]) => ms === 3100)).toHaveLength(6);
+    expect(sleep.mock.calls.filter(([ms]) => ms === 3100)).toHaveLength(7);
   });
 
-  it('API 回傳錯誤代碼時，錯誤訊息不含 Key', async () => {
-    const fetchImpl = api({ '/etfs': () => ({ ok: false, status: 401, json: async () => ({ code: 400101, message: 'API Key is invalid' }) }) });
-    const err = await run(fetchImpl).catch((e) => e);
+  it('API 錯誤時訊息帶狀態碼但不含 Key；HTTP 成功但 code 不是 0 也算失敗', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unauthorized = () => ({ ok: false, status: 401, json: async () => ({ code: 400101, message: 'API Key is invalid' }) });
+    const err = await run(api({ 'BTC/list': unauthorized })).catch((e) => e);
     expect(err.message).toContain('401');
     expect(err.message).not.toContain(KEY);
-  });
-
-  it('HTTP 成功但 code 不是 0 時視為失敗', async () => {
-    const fetchImpl = api({ '/summary-history': () => ({ ok: true, status: 200, json: async () => ({ code: 400003, message: 'Invalid parameter: symbol' }) }) });
-    await expect(run(fetchImpl)).rejects.toThrow('400003');
-  });
-
-  it('不跟隨重新導向，Key 不會被轉送到其他網址', async () => {
-    const fetchImpl = api();
-    await run(fetchImpl);
-    for (const [, init] of fetchImpl.mock.calls) expect(init.redirect).toBe('error');
-  });
-
-  it('retry_after 過大時最多等 120 秒；也接受 Retry-After header', async () => {
-    const limited = (body, headers = {}) => {
-      let first = true;
-      return () => {
-        if (!first) return ok(SNAPS.IBIT);
-        first = false;
-        return { ok: false, status: 429, headers: new Headers(headers), json: async () => body };
-      };
-    };
-    sleep.mockClear();
-    await run(api({ '/IBIT/': limited({ details: { retry_after: 99999 } }) }));
-    expect(sleep).toHaveBeenCalledWith(120_000);
-    sleep.mockClear();
-    await run(api({ '/IBIT/': limited({}, { 'Retry-After': '9' }) }));
-    expect(sleep).toHaveBeenCalledWith(9000);
-  });
-
-  it('快照缺少資產規模（解析失敗）也算失敗；超過一半就整體失敗', async () => {
-    const empty = () => ok({ ticker: 'X', net_assets: null });
-    await expect(run(api({ '/IBIT/': empty, '/FBTC/': empty }))).rejects.toThrow('2/3');
-  });
-
-  it('某個資產一檔都沒抓到時整體失敗，不發佈缺一半的資料', async () => {
-    const fail = () => ({ ok: false, status: 500, json: async () => ({}) });
-    await expect(run(api({ '/ETHA/': fail }))).rejects.toThrow('ETH');
+    const badCode = () => ({ ok: true, status: 200, json: async () => ({ code: 400003, message: 'Invalid parameter: symbol' }) });
+    await expect(run(api({ 'ETH/list': badCode }))).rejects.toThrow('400003');
+    warn.mockRestore();
   });
 });

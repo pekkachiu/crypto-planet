@@ -14,7 +14,7 @@ import { createTerrainField } from './sim/terrain-field.js';
 import { planetNameKey } from './data/planets.js';
 import { detectLang, createTranslator, STORAGE_KEY } from './i18n/index.js';
 import { loadLiquidations } from './data/okx-liquidations.js';
-import { loadEtfDataset, pickTopEtfs, mapEtfTown } from './data/etf.js';
+import { loadEtfDataset, rankAssets, mapEtfTown, ETF_ASSETS } from './data/etf.js';
 import { detectTheme, THEME_STORAGE_KEY } from './ui/theme.js';
 import { applyNight } from './kit/materials.js';
 import { createCameraRig, HOME } from './scenes/camera-rig.js';
@@ -378,7 +378,7 @@ const applyData = (coins) => applyTownData(MAJOR, mapTown(coins));
 
 function applyEtf(dataset) {
   ui.setEtfMeta(dataset);
-  applyTownData(ETF, mapEtfTown(pickTopEtfs(dataset.etfs)));
+  applyTownData(ETF, mapEtfTown(rankAssets(dataset.assets)));
 }
 
 let refreshingEtf = false;
@@ -436,9 +436,12 @@ async function refresh() {
   }
 }
 
+/** 有小鎮的星球設定：主流星有爆倉公園、十間店；ETF 星一個幣種一棟 */
+const TOWN_LAYOUT = { [MAJOR]: { park: true }, [ETF]: { park: false, count: ETF_ASSETS.length } };
+
 /** 小鎮星球的地形：店面與公園位置整平成廣場 */
-const townField = (seed, radius, park) => createTerrainField({
-  seed, spots: townSpots({ park }), plazaAngle: PLAZA_RADIUS / radius,
+const townField = (seed, radius, layout) => createTerrainField({
+  seed, spots: townSpots(layout), plazaAngle: PLAZA_RADIUS / radius,
 });
 
 async function start() {
@@ -446,16 +449,16 @@ async function start() {
   const [first, etfData] = await Promise.all([loadTopCoins(), loadEtfDataset()]);
   const majorRadius = planetRadius(first.coins.reduce((sum, c) => sum + c.marketCap, 0));
   const radii = { [MAJOR]: majorRadius };
-  const townFields = { [MAJOR]: townField(MAJOR_TERRAIN_SEED, majorRadius, true) };
+  const townFields = { [MAJOR]: townField(MAJOR_TERRAIN_SEED, majorRadius, TOWN_LAYOUT[MAJOR]) };
   const available = new Set([MAJOR]);
   if (etfData) {
-    radii[ETF] = planetRadius(pickTopEtfs(etfData.etfs).reduce((sum, e) => sum + e.netAssets, 0));
-    townFields[ETF] = townField(ETF_TERRAIN_SEED, radii[ETF], false);
+    radii[ETF] = planetRadius(etfData.assets.reduce((sum, a) => sum + a.netAssets, 0));
+    townFields[ETF] = townField(ETF_TERRAIN_SEED, radii[ETF], TOWN_LAYOUT[ETF]);
     available.add(ETF);
   }
   solar = createSolarSystem(scene, { radii, townFields, available, t });
   for (const id of available) {
-    const town = createTown(solar.planets.get(id).group, radii[id], { park: id === MAJOR });
+    const town = createTown(solar.planets.get(id).group, radii[id], TOWN_LAYOUT[id]);
     towns.set(id, { town, data: [], radius: radii[id] });
   }
   applyData(first.coins);

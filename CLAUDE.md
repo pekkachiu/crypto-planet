@@ -40,7 +40,7 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 - **前十大的定義**：排除穩定幣與包裝幣後，在 Binance 有 USDT 現貨交易對的市值前十名。Binance 沒上架的幣拿不到主動買賣量，所以不列入。
 - **建築用「絕對」市值分級**（`src/data/tiers.js`），以後的迷因星小幣自然就是小攤。
 - **爆倉公園只用 OKX 資料，不是全網。** 使用者看過 Coinglass，但它的內部 API 是加密的；拆解加密等於繞過網站保護，所以不採用。付費或要 Key 的方案（Coinglass、Coinalyze）暫不使用。介面上必須保留「僅 OKX、非全網」的標示。
-- **ETF 星用 SoSoValue 官方 API**（免費 Key）。舊的免 Key 端點 `api.sosovalue.xyz` 已下線（404）；Farside 有 Cloudflare 防爬蟲保護、DefiLlama 沒有公開的 ETF API，兩者都不採用。範圍是美國現貨 BTC＋ETH ETF，取資產規模前十。綠色隊伍＝淨流入、紅色隊伍＝淨流出。
+- **ETF 星用 SoSoValue 官方 API**（免費 Key）。舊的免 Key 端點 `api.sosovalue.xyz` 已下線（404）；Farside 有 Cloudflare 防爬蟲保護、DefiLlama 沒有公開的 ETF API，兩者都不採用。範圍是美國現貨 ETF，**依幣種加總、一個幣種一棟**（`ETF_ASSETS`：BTC、ETH、SOL、XRP；使用者覺得每檔 ETF 一棟太多）。BTC、ETH 抓不到就整體失敗，SOL、XRP 抓不到只略過那一棟。每個幣種只打 `/etfs`（代號清單）與 `/etfs/summary-history`（總計）兩個請求。綠色隊伍＝淨流入、紅色隊伍＝淨流出。
 - 即時爆倉隕石做過又拿掉了：主流幣在平靜行情下的即時爆倉太稀疏，畫面上幾乎看不到。
 - 日夜模式預設依當地時間（06–18 為白天），使用者切換後記在 localStorage。
 - 支援手機。直式螢幕用 `fitFactor()` 把鏡頭拉遠。
@@ -55,7 +55,7 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
   - `sz` 是張數，金額＝`sz × ctVal × bkPx`，`ctVal` 來自 `/public/instruments`。
   - 單向持倉模式沒有 `posSide`，改看 `side`：`sell` 是多單爆倉，`buy` 是空單爆倉。
   - 個別幣種失敗時加總成功的幣並標記 `partial`；之後的更新失敗時保留上一次的真實資料。
-- **SoSoValue**（`openapi.sosovalue.com/openapi/v1`，header `x-soso-api-key`）：每分鐘 20 次、每月 10 萬次，`etf-fetch.js` 每個請求間隔 3.2 秒並處理 429。資金流 T+1 結算，要拿最新已結算數字用 `/etfs/{ticker}/market-snapshot`；`summary-history` 的第一筆可能是 null，要跳過。
+- **SoSoValue**（`openapi.sosovalue.com/openapi/v1`，header `x-soso-api-key`）：每分鐘 20 次、每月 10 萬次，`etf-fetch.js` 每個請求間隔 3.2 秒並處理 429。資金流 T+1 結算，`summary-history` 的第一筆可能是 null（還沒結算），要跳過。個別 ETF 快照的 `prem_dsc` 目前回傳 null。
 - **API Key 存在 `github-pages` 環境（environment）的 secret `SOSOVALUE_API_KEY`**，不是 repo secret。這個環境只允許 main 分支，只有 `deploy.yml` 的 `etf-data` job 拿得到；該 job 不跑 `npm ci`，`fetch-etf.mjs` 也不載入任何 npm 套件。請求設 `redirect: 'error'`，避免 Key 被導向轉送。絕對不要把 Key 放進 `src/`、前端程式碼或任何 log。本機用 `.env.local`（已 gitignore）。
 - 排程（schedule）的 workflow 在 repo 60 天沒有活動後會被 GitHub 自動停用，ETF 資料就不會再更新；網頁會顯示資料日期，看到日期太舊時到 Actions 重新啟用。
 - 用 Python `urllib` 打 OKX 會被擋（403，缺 User-Agent），測試 API 請改用 Node 的 `fetch` 或 curl。
@@ -78,4 +78,4 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 ## 待辦
 
 - 迷因、AI、公鏈星球：CoinGecko 有 `/coins/categories` 可以用。
-- ETF 星目前只有美國現貨 BTC／ETH；SoSoValue 也有 SOL、XRP 等與香港 ETF，要加的話改 `ETF_ASSETS`。
+- SoSoValue 還有 LTC、HBAR、DOGE、LINK、AVAX、DOT 與香港 ETF，要加的話改 `ETF_ASSETS`（每多一種幣多 2 個請求、一棟樓）。
