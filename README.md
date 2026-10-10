@@ -9,7 +9,19 @@
 - **叫號速度**：24 小時成交筆數
 - **顏色**：綠漲紅跌
 
-第一版開放「主流星」：排除穩定幣與包裝幣後，在 Binance 有 USDT 交易對的市值前十大。迷因、AI、公鏈、ETF 星球即將開放。
+目前開放兩顆星球：
+
+- **主流星**：排除穩定幣與包裝幣後，在 Binance 有 USDT 交易對的市值前十大。
+- **ETF 星**：美國現貨 BTC、ETH ETF 中資產規模前十大，每檔 ETF 是一間店（見下方）。
+
+迷因、AI、公鏈星球即將開放。
+
+### ETF 星
+
+- **建築等級**：依資產規模（AUM），≥ $50B 摩天大樓、≥ $10B 辦公大樓、≥ $1B 街邊店舖、其他小攤
+- **門口右側隊伍（綠）**：單日淨流入；**左側隊伍（紅）**：單日淨流出（只有一邊有人）
+- **路人與叫號速度**：成交額
+- 資金流是 **T+1 結算**，畫面上的數字是最近一個已結算交易日；還沒結算的顯示「尚未結算」
 
 ### 爆倉公園
 
@@ -23,11 +35,12 @@
 
 ## 資料來源
 
-瀏覽器直接呼叫公開 API，不需要 API Key。僅供視覺化參考，非投資建議。
+主流星與爆倉公園由瀏覽器直接呼叫公開 API，不需要 API Key。僅供視覺化參考，非投資建議。
 
 - [CoinGecko](https://www.coingecko.com/)：市值、價格、24 小時漲跌（每 60 秒）
 - [Binance](https://data-api.binance.vision/)：用 1 小時 K 線加總出 24 小時成交額、主動買入量、成交筆數（每 60 秒）
 - [OKX](https://www.okx.com/docs-v5/en/#public-data-rest-api-get-liquidation-orders)：爆倉公園的 24 小時爆倉，僅 OKX 一家（每 5 分鐘）
+- [SoSoValue](https://sosovalue.com/)：ETF 星的資金流、資產規模與成交額。這個 API 需要 Key，所以**不是由瀏覽器呼叫**：GitHub Actions 每天兩次用存在 GitHub Secrets 的 Key 抓資料，整理成 `data/etf.json` 跟網站一起部署。網頁只讀這份 JSON，看不到 Key
 
 API 失敗時改用 `src/data/sample.json` 與 `src/data/sample-liquidations.json` 範例資料（用 `node scripts/make-sample.mjs` 更新）。
 
@@ -41,6 +54,18 @@ npm run coverage   # 單元測試＋覆蓋率（門檻 80%）
 npm run e2e        # Playwright 端對端測試（桌機＋手機）
 npm run build      # 輸出到 dist/
 ```
+
+### ETF 資料（需要 SoSoValue API Key）
+
+1. 到 [SoSoValue](https://openapi.sosovalue.com/) 申請免費 API Key（每分鐘 20 次、每月 10 萬次）。
+2. 部署用：repo 的 **Settings → Secrets and variables → Actions** 新增 `SOSOVALUE_API_KEY`。
+3. 本機測試（選用）：把 `SOSOVALUE_API_KEY=你的Key` 寫進 `.env.local`（已被 `.gitignore` 排除，不會進版本控制），再執行：
+
+   ```bash
+   node --env-file=.env.local scripts/fetch-etf.mjs   # 產生 public/data/etf.json
+   ```
+
+沒有 `etf.json` 時，ETF 星會維持上鎖，其他功能不受影響。
 
 ## 技術
 
