@@ -14,6 +14,7 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 ```
 
 - **ETF 資料的 Key**：部署用的 Key 存成 `github-pages` 環境的 secret（`gh secret set SOSOVALUE_API_KEY --env github-pages`，或在 Settings → Environments 設定）。本機測試把 `SOSOVALUE_API_KEY=...` 寫進 `.env.local`（已 gitignore）。沒有 `public/data/etf.json` 時 ETF 星會上鎖，其他功能不受影響。
+- **訪客統計**：`index.html` 載入 GoatCounter（帳號 `crypto-planet`，統計頁 https://crypto-planet.goatcounter.com）。腳本鎖定 `count.v5.js` 並帶 `integrity`；升級時要重新取得並自行驗證雜湊（`curl … | openssl dgst -sha384 -binary | openssl base64 -A`）。E2E 會攔截 gc.zgo.at 與 goatcounter.com，不送統計。
 - README 只寫給使用者看的專案介紹，不放開發教學；開發相關的內容都寫在這份 CLAUDE.md。截圖在 `docs/screenshots/`，從上線網站用 Playwright 拍、存成 JPEG。
 - 本機預覽請用 `npx vite preview --port 4173`。有 hook 會擋下指令裡出現「npm run dev」字樣的呼叫，包括寫進檔案內容的 heredoc。
 - 本機跑 E2E 時，如果 4173 已經有預覽伺服器，Playwright 會直接沿用（`reuseExistingServer`），測到的是舊的 `dist/`。改完程式先 `npm run build`。

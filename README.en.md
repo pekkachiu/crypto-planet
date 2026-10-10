@@ -71,6 +71,8 @@ If live data can't be reached, the site falls back to bundled sample data and sa
 
 > This site is a visualization for reference only and is **not financial advice**.
 
+**Privacy**: page views are counted with [GoatCounter](https://www.goatcounter.com/), which uses no cookies and collects no personal data.
+
 ## Tech
 
 A purely static site with no backend: Three.js (WebGL) and Vite, hosted on GitHub Pages. The ETF data needs an API key, so GitHub Actions fetches it twice a day and deploys it together with the site; the key never appears in the web page or the source code.

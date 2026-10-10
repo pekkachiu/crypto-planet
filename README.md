@@ -71,6 +71,8 @@
 
 > 本網站僅供視覺化參考，**不構成任何投資建議**。
 
+**隱私**：網站用 [GoatCounter](https://www.goatcounter.com/) 計算瀏覽人次，不使用 Cookie，也不收集任何個人資料。
+
 ## 技術
 
 純靜態網站，沒有後端：Three.js（WebGL）、Vite，部署在 GitHub Pages。ETF 資料需要 API Key，由 GitHub Actions 每天抓好後跟網站一起部署，Key 不會出現在網頁或程式碼裡。
