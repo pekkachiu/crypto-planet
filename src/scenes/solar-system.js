@@ -1,44 +1,16 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { PLANETS, orbitPosition } from '../data/planets.js';
+import { PLANETS, orbitPosition, planetNameKey, planetSubtitleKey } from '../data/planets.js';
 import { createRng } from '../sim/rng.js';
+import { createTerrainField } from '../sim/terrain-field.js';
+import { createTerrainMesh, createTrees, tintedPalette, EARTHY } from '../kit/terrain.js';
 
 const SUN_RADIUS = 11;
 const STAR_COUNT = 2200;
 const STAR_SHELL = 900;
-
-/** 用 canvas 畫一張有雲帶與斑點的星球貼圖，每顆星球依種子不同 */
-function planetTexture(color, seed, { land = false } = {}) {
-  const rng = createRng(seed);
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  const base = new THREE.Color(color);
-  ctx.fillStyle = land ? '#1d4f7a' : base.getStyle();
-  ctx.fillRect(0, 0, 512, 256);
-  for (let i = 0; i < 26; i++) {
-    const y = rng() * 256;
-    const c = base.clone().offsetHSL(0, 0, (rng() - 0.5) * 0.22);
-    ctx.fillStyle = c.getStyle();
-    ctx.globalAlpha = land ? 0 : 0.5;
-    ctx.fillRect(0, y, 512, 4 + rng() * 18);
-  }
-  ctx.globalAlpha = 1;
-  const blobs = land ? 70 : 24;
-  for (let i = 0; i < blobs; i++) {
-    const c = land
-      ? new THREE.Color('#3f8f5a').offsetHSL((rng() - 0.5) * 0.06, 0, (rng() - 0.5) * 0.12)
-      : base.clone().offsetHSL(0, 0, (rng() - 0.5) * 0.3);
-    ctx.fillStyle = c.getStyle();
-    ctx.beginPath();
-    ctx.ellipse(rng() * 512, 30 + rng() * 196, 10 + rng() * (land ? 46 : 22), 6 + rng() * (land ? 30 : 10), 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
+/** 地形細分程度：主流星要能站人，細一點；其他星球遠看即可 */
+const DETAIL = { town: 26, other: 10 };
+const MAJOR_GREENS = ['#5fb36a', '#6fc07a', '#4fa35e', '#86c96f'];
 
 function atmosphere(radius, color) {
   const material = new THREE.ShaderMaterial({
@@ -59,7 +31,7 @@ function atmosphere(radius, color) {
       void main() {
         // 只畫背面：星球本體擋住中央，只剩輪廓外的一圈光暈，靠近星球最亮、往外淡出
         float glow = smoothstep(0.0, 0.45, abs(dot(vNormal, vView)));
-        gl_FragColor = vec4(glowColor, glow * 0.75);
+        gl_FragColor = vec4(glowColor, glow * 0.55);
       }`,
     transparent: true,
     blending: THREE.AdditiveBlending,
@@ -76,7 +48,7 @@ function orbitLine(radius) {
   });
   return new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(points),
-    new THREE.LineBasicMaterial({ color: '#33415c', transparent: true, opacity: 0.55 }),
+    new THREE.LineBasicMaterial({ color: '#3a4a6b', transparent: true, opacity: 0.55 }),
   );
 }
 
@@ -99,57 +71,67 @@ function planetLabel(planet) {
   el.className = `planet-label${planet.enabled ? '' : ' locked'}`;
   el.dataset.planet = planet.id;
   const name = document.createElement('strong');
-  name.textContent = planet.enabled ? planet.name : `🔒 ${planet.name}`;
   const sub = document.createElement('span');
-  sub.textContent = planet.subtitle;
   el.append(name, sub);
-  return new CSS2DObject(el);
+  const object = new CSS2DObject(el);
+  object.setText = (t) => {
+    name.textContent = planet.enabled ? t(planetNameKey(planet)) : `🔒 ${t(planetNameKey(planet))}`;
+    sub.textContent = t(planetSubtitleKey(planet));
+  };
+  return object;
 }
 
 function createSun() {
   const group = new THREE.Group();
   group.add(new THREE.Mesh(
-    new THREE.SphereGeometry(SUN_RADIUS, 48, 32),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffc861').multiplyScalar(2.2), toneMapped: false }),
+    new THREE.IcosahedronGeometry(SUN_RADIUS, 3),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd27a').multiplyScalar(2.2), toneMapped: false }),
   ));
-  group.add(atmosphere(SUN_RADIUS * 1.25, '#ff9d3c'));
-  group.add(new THREE.PointLight('#fff1d6', 2.6, 0, 0));
+  group.add(atmosphere(SUN_RADIUS * 1.25, '#ffb057'));
+  group.add(new THREE.PointLight('#fff4e0', 2.4, 0, 0));
   return group;
 }
 
+function createPlanetBody(config, index, radius, townField) {
+  const seed = 101 + index * 17;
+  if (townField) {
+    const group = new THREE.Group();
+    const mesh = createTerrainMesh({ radius, field: townField, palette: EARTHY, detail: DETAIL.town, seed });
+    group.add(mesh, createTrees({ radius, field: townField, seed, greens: MAJOR_GREENS }));
+    return { body: group, mesh };
+  }
+  const field = createTerrainField({ seed, waterLevel: -0.05 });
+  const palette = tintedPalette(config.color);
+  const mesh = createTerrainMesh({ radius, field, palette, detail: DETAIL.other, seed });
+  if (!config.enabled) mesh.material.color.setScalar(0.72);
+  return { body: mesh, mesh };
+}
+
 /**
- * 太陽系：太陽、五顆星球、軌道線與星空。
- * radii 指定每顆星球的半徑（主流星依總市值計算）。
+ * 太陽系：太陽、五顆低多邊形星球、軌道線與星空。
+ * @param {THREE.Scene} scene
+ * @param {{radii: Record<string, number>, townFields: Record<string, Function>, t: Function}} opts
  */
-export function createSolarSystem(scene, radii) {
-  scene.add(new THREE.AmbientLight('#8fa6ff', 0.7));
-  scene.add(new THREE.HemisphereLight('#bcd4ff', '#1a1f2e', 0.7));
+export function createSolarSystem(scene, { radii, townFields, t }) {
+  scene.add(new THREE.AmbientLight('#fffaf2', 0.75));
+  scene.add(new THREE.HemisphereLight('#fff6ea', '#7d6d60', 0.85));
   scene.add(starfield(), createSun());
 
   const planets = new Map(PLANETS.map((config, i) => {
     const radius = radii[config.id] ?? config.radius;
     const group = new THREE.Group();
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(radius, 96, 64),
-      new THREE.MeshStandardMaterial({
-        map: planetTexture(config.color, 101 + i * 17, { land: config.id === 'major' }),
-        roughness: 0.92,
-        emissive: new THREE.Color(config.color),
-        emissiveIntensity: config.enabled ? 0.05 : 0.02,
-      }),
-    );
-    if (!config.enabled) mesh.material.color.setScalar(0.55);
+    const { body, mesh } = createPlanetBody(config, i, radius, townFields[config.id]);
     mesh.userData.planetId = config.id;
     const label = planetLabel(config);
     label.position.set(0, radius + 4.5, 0);
-    group.add(mesh, atmosphere(radius, config.color), label);
+    group.add(body, atmosphere(radius, config.color), label);
     scene.add(orbitLine(config.orbit), group);
     return [config.id, { config, group, mesh, label, radius }];
   }));
 
-  const update = (t) => {
+  const update = (time) => {
     for (const p of planets.values()) {
-      const { x, z } = orbitPosition(p.config, t);
+      const { x, z } = orbitPosition(p.config, time);
       p.group.position.set(x, 0, z);
     }
   };
@@ -159,6 +141,11 @@ export function createSolarSystem(scene, radii) {
     return hit ? planets.get(hit.object.userData.planetId) : null;
   };
 
+  const setLanguage = (translate) => {
+    for (const p of planets.values()) p.label.setText(translate);
+  };
+
+  setLanguage(t);
   update(0);
-  return { planets, update, pick };
+  return { planets, update, pick, setLanguage };
 }

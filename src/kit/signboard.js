@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { formatPrice, formatPct } from '../ui/format.js';
-import { TREND_COLORS } from './palette.js';
 
+// 淺色招牌上的漲跌字色要深一點才看得清楚
+const TREND_TEXT = Object.freeze({ up: '#0f9d63', down: '#d63340', flat: '#7d8790' });
 const W = 512;
 const H = 224;
 const FONT = '"Outfit", "PingFang TC", "Noto Sans TC", system-ui, sans-serif';
@@ -21,32 +22,32 @@ export function createSignboard() {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   // alphaTest＋寫入深度：前後重疊的招牌不會互相透字；color 壓暗一點避免白字被 Bloom 糊掉
-  const material = new THREE.SpriteMaterial({ map: texture, alphaTest: 0.2, color: new THREE.Color(0.74, 0.74, 0.74) });
+  const material = new THREE.SpriteMaterial({ map: texture, alphaTest: 0.2, color: new THREE.Color(0.7, 0.7, 0.7) });
   const sprite = new THREE.Sprite(material);
   sprite.scale.set(2.3, 2.3 * (H / W), 1);
-  sprite.position.set(0, 2.75, 0);
+  sprite.position.set(0, 2.75, -0.1);
 
   const draw = ({ symbol, rank, price, change24h }, trend, accent) => {
     ctx.clearRect(0, 0, W, H);
     roundRect(ctx, 6, 6, W - 12, H - 12, 28);
-    ctx.fillStyle = '#090d16';
+    ctx.fillStyle = '#fffaf2';
     ctx.fill();
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 10;
     ctx.strokeStyle = accent;
     ctx.stroke();
 
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#8b99a5';
+    ctx.fillStyle = '#8a8478';
     ctx.font = `600 34px ${FONT}`;
     ctx.fillText(`#${rank}`, 34, 70);
-    ctx.fillStyle = '#edf2f5';
+    ctx.fillStyle = '#2b2d42';
     ctx.font = `800 76px ${FONT}`;
     ctx.fillText(symbol, 110, 82);
 
     ctx.font = `600 54px ${FONT}`;
     ctx.fillText(formatPrice(price), 34, 168);
     ctx.textAlign = 'right';
-    ctx.fillStyle = TREND_COLORS[trend];
+    ctx.fillStyle = TREND_TEXT[trend];
     ctx.font = `700 46px ${FONT}`;
     ctx.fillText(formatPct(change24h), W - 34, 168);
     ctx.textAlign = 'left';

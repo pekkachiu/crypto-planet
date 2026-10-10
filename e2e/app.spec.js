@@ -71,3 +71,33 @@ test('頁面沒有未捕捉的 JavaScript 錯誤，也沒有水平捲動', async
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   expect(overflow).toBe(false);
 });
+
+test('中英切換：介面、星球名稱與網址都跟著改，重新整理後仍記得', async ({ page }) => {
+  await openSolar(page);
+  await expect(page.locator('#brand h1')).toHaveText('加密星球小鎮');
+  await page.locator('#lang').click();
+  await expect(page.locator('#brand h1')).toHaveText('Crypto Planet Town');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('[data-planet="major"] strong')).toHaveText('Majors');
+  await expect(page.locator('#status')).toContainText('sample data');
+  expect(new URL(page.url()).searchParams.get('lang')).toBe('en');
+
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'solar', { timeout: 20_000 });
+  await expect(page.locator('#brand h1')).toHaveText('Crypto Planet Town');
+});
+
+test('英文瀏覽器預設顯示英文，資訊卡顯示建築等級', async ({ browser }) => {
+  const context = await browser.newContext({ locale: 'en-US' });
+  const page = await context.newPage();
+  await offline(page);
+  await openSolar(page);
+  await expect(page.locator('#brand h1')).toHaveText('Crypto Planet Town');
+  await page.locator('[data-planet="major"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await page.locator(`#coin-strip [data-coin="${sample.coins[0].id}"]`).click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'shop', { timeout: 10_000 });
+  await expect(page.locator('#coin-tier')).toHaveText('Skyscraper');
+  await expect(page.locator('#back')).toHaveText('← Back to planet');
+  await context.close();
+});

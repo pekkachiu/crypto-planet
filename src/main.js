@@ -9,7 +9,10 @@ import { loadTopCoins } from './data/api.js';
 import { mapTown, planetRadius } from './data/mapping.js';
 import { REFRESH_MS } from './data/config.js';
 import { createSolarSystem } from './scenes/solar-system.js';
-import { createTown } from './scenes/planet-town.js';
+import { createTown, townSpots, PLAZA_RADIUS } from './scenes/planet-town.js';
+import { createTerrainField } from './sim/terrain-field.js';
+import { planetNameKey } from './data/planets.js';
+import { detectLang, createTranslator, STORAGE_KEY } from './i18n/index.js';
 import { createCameraRig, HOME } from './scenes/camera-rig.js';
 import { createUI } from './ui/panel.js';
 
@@ -22,8 +25,10 @@ const CROWD_VISIBLE_FACTOR = 5;
 const SOLAR_DISTANCE = { min: 40, max: 700 };
 /** 星球全景的縮放範圍（以半徑為單位）：最近停在地表上空，避免一路衝到地面 */
 const PLANET_DISTANCE = { min: 1.6, max: 6 };
-/** 店門口特寫：鏡頭在店前方 back、上方 up，注視店面 lookHeight 高度 */
-const SHOP_VIEW = { up: 3.4, back: 6.2, lookHeight: 0.7 };
+/** 店門口特寫：鏡頭在店前方 back、上方 up，注視店面 lookHeight 高度；高樓依 refHeight 等比拉遠 */
+/** 注視點在門口隊伍中間（往南 lookAhead）、高度隨建築拉高一點，隊伍與樓頂都入鏡 */
+const SHOP_VIEW = { up: 4.2, back: 7.4, lookRatio: 0.24, minLook: 0.8, lookAhead: 1.4, refHeight: 4.5 };
+const MAJOR_TERRAIN_SEED = 118;
 const SHOP_DISTANCE = { min: 2.2, max: 24 };
 /** 繞店旋轉時，鏡頭最低只到接近地平線，不會鑽到地底 */
 const SHOP_MAX_POLAR = 1.38;
@@ -48,6 +53,11 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('#070b14');
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.05, 4000);
 camera.position.copy(HOME.position);
+// 跟著鏡頭的補光：不論星球公轉到哪，看小鎮時都有柔和的面光，低多邊形的面才看得出來
+const fillLight = new THREE.DirectionalLight('#fff6ea', 0.9);
+fillLight.position.set(2, 4, 3);
+camera.add(fillLight);
+scene.add(camera);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -83,7 +93,30 @@ let solar = null;
 let town = null;
 let majorRadius = 0;
 
+// ---------- 語言 ----------
+const storage = {
+  get() { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } },
+  set(value) { try { localStorage.setItem(STORAGE_KEY, value); } catch { /* 無痕模式等情況存不了，不影響使用 */ } },
+};
+let lang = detectLang({ search: location.search, stored: storage.get(), languages: navigator.languages ?? [] });
+let t = createTranslator(lang);
+
+function toggleLang() {
+  lang = lang === 'en' ? 'zh-TW' : 'en';
+  t = createTranslator(lang);
+  storage.set(lang);
+  // 網址帶上語言，分享出去的連結會用同一種語言開啟
+  const url = new URL(location.href);
+  url.searchParams.set('lang', lang);
+  history.replaceState(null, '', url);
+  ui.setLanguage(t, lang);
+  solar?.setLanguage(t);
+}
+
 const ui = createUI({
+  t,
+  lang,
+  onToggleLang: () => toggleLang(),
   onBack: () => goBack(),
   onSpeed: (speed) => { state.speed = speed; },
   onClose: () => { if (state.view === 'shop') goBack(); },
@@ -130,11 +163,13 @@ function planetShot(planet) {
 
 /** 店門口特寫：站在店的正前方（南側）斜上方，上方向是該處地面法線 */
 function shopShot(index) {
-  const { position, up, south, scale } = town.shopFrame(index);
-  const s = Math.max(1, scale) * fitFactor();
+  const { position, up, south, height } = town.shopFrame(index);
+  const s = Math.max(1, height / SHOP_VIEW.refHeight) * fitFactor();
   return {
     position: position.clone().addScaledVector(up, SHOP_VIEW.up * s).addScaledVector(south, SHOP_VIEW.back * s),
-    target: position.clone().addScaledVector(up, SHOP_VIEW.lookHeight),
+    target: position.clone()
+      .addScaledVector(up, Math.max(SHOP_VIEW.minLook, height * SHOP_VIEW.lookRatio))
+      .addScaledVector(south, SHOP_VIEW.lookAhead),
     up,
   };
 }
@@ -142,7 +177,7 @@ function shopShot(index) {
 async function enterPlanet(planet) {
   if (state.view !== 'solar') return;
   if (!planet.config.enabled) {
-    ui.toast(`${planet.config.name}即將開放`);
+    ui.toast(t('toast.locked', { planet: t(planetNameKey(planet.config)) }));
     return;
   }
   state.focused = planet;
@@ -263,7 +298,10 @@ async function start() {
   const first = await loadTopCoins();
   const totalCap = first.coins.reduce((sum, c) => sum + c.marketCap, 0);
   majorRadius = planetRadius(totalCap);
-  solar = createSolarSystem(scene, { major: majorRadius });
+  const majorField = createTerrainField({
+    seed: MAJOR_TERRAIN_SEED, spots: townSpots(), plazaAngle: PLAZA_RADIUS / majorRadius,
+  });
+  solar = createSolarSystem(scene, { radii: { major: majorRadius }, townFields: { major: majorField }, t });
   town = createTown(solar.planets.get('major').group, majorRadius);
   applyData(first.coins);
   if (first.source === 'live') lastLiveAt = first.updatedAt;
@@ -304,5 +342,5 @@ function frame() {
 
 start().catch((err) => {
   console.error('[crypto-planet] 啟動失敗', err);
-  ui.failLoading('啟動失敗，請重新整理頁面');
+  ui.failLoading(t('error.start'));
 });

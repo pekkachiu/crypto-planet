@@ -71,6 +71,13 @@ describe('mapTown', () => {
     expect(a.coin).toBe(coins[0]);
     expect(JSON.stringify(coins)).toBe(snapshot);
   });
+  it('依絕對市值附上建築等級與級內位置', () => {
+    const [a, b] = mapTown(coins);
+    expect(a.tier).toBe(1);
+    expect(b.tier).toBe(4);
+    expect(a.tierProgress).toBeGreaterThanOrEqual(0);
+    expect(a.tierProgress).toBeLessThanOrEqual(1);
+  });
   it('空陣列回傳空陣列', () => {
     expect(mapTown([])).toEqual([]);
   });

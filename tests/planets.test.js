@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { PLANETS, orbitPosition, findPlanet } from '../src/data/planets.js';
+import { PLANETS, orbitPosition, findPlanet, planetNameKey, planetSubtitleKey } from '../src/data/planets.js';
+import { MESSAGES } from '../src/i18n/index.js';
 
 describe('PLANETS', () => {
   it('包含主流、迷因、AI、公鏈、ETF 五顆星球，且 id 不重複', () => {
@@ -17,6 +18,17 @@ describe('PLANETS', () => {
   });
 });
 
+describe('星球名稱翻譯', () => {
+  it('每顆星球都有中英文名稱與副標', () => {
+    for (const p of PLANETS) {
+      for (const lang of ['zh-TW', 'en']) {
+        expect(MESSAGES[lang][planetNameKey(p)], `${lang} ${p.id}`).toBeTruthy();
+        expect(MESSAGES[lang][planetSubtitleKey(p)], `${lang} ${p.id}`).toBeTruthy();
+      }
+    }
+  });
+});
+
 describe('orbitPosition', () => {
   it('位置落在軌道半徑上，並隨時間前進', () => {
     const p = { orbit: 50, speed: 0.1, phase: 0 };
@@ -30,7 +42,7 @@ describe('orbitPosition', () => {
 
 describe('findPlanet', () => {
   it('依 id 找星球，找不到回傳 undefined', () => {
-    expect(findPlanet('major').name).toBe('主流星');
+    expect(findPlanet('major').id).toBe('major');
     expect(findPlanet('nope')).toBeUndefined();
   });
 });

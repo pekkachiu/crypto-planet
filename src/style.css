@@ -52,8 +52,16 @@ body {
   color: var(--text); font: 600 14px var(--sans); padding: 10px 16px; cursor: pointer;
   min-height: 44px;
 }
-#back { position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + var(--gutter)); }
-#back:hover { border-color: var(--accent); }
+#top-actions {
+  position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + var(--gutter));
+  display: flex; gap: 8px;
+}
+#top-actions .chip:hover { border-color: var(--accent); }
+#lang { min-width: 48px; font-family: var(--mono); }
+.tier-badge {
+  margin-left: auto; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: var(--accent); background: rgba(76, 194, 255, 0.12); border: 1px solid rgba(76, 194, 255, 0.3);
+}
 
 #coin-card {
   position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + 84px);
@@ -64,7 +72,7 @@ body {
   background: transparent; color: var(--muted); font-size: 22px; cursor: pointer;
 }
 .close:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
-.coin-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.coin-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding-right: 32px; }
 .coin-head h2 { margin: 0; font-size: 28px; font-weight: 800; }
 .coin-price { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 0 12px; }
 #coin-price { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -132,11 +140,12 @@ body {
 /* 手機：資訊卡改成底部抽屜，控制列縮小 */
 @media (max-width: 720px) {
   :root { --gutter: 12px; }
-  #brand { padding: 8px 12px; max-width: calc(100vw - 2 * var(--gutter) - 128px); border-radius: 12px; }
+  #brand { padding: 8px 12px; max-width: calc(100vw - 2 * var(--gutter) - 150px); border-radius: 12px; }
   #brand h1 { font-size: 16px; }
   #view-title { font-size: 12px; margin: 2px 0 3px; }
   #status { font-size: 10px; letter-spacing: 0.02em; }
-  #back { padding: 10px 12px; font-size: 13px; }
+  #top-actions .chip { padding: 10px 12px; font-size: 13px; }
+  #top-actions { flex-direction: column; align-items: flex-end; }
   #coin-card {
     left: calc(var(--sl) + var(--gutter)); right: calc(var(--sr) + var(--gutter)); top: auto; width: auto;
     bottom: calc(var(--sb) + 136px); padding: 14px 14px 10px;

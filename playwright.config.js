@@ -8,6 +8,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   use: {
     baseURL: `http://localhost:${PORT}/`,
+    locale: 'zh-TW',
     // 無頭模式用軟體 WebGL
     launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
   },

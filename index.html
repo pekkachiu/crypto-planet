@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#070b14">
-<meta name="description" content="加密貨幣星球小鎮：每個分類一顆星球、每個幣種一間店，門口隊伍是 24 小時主動買賣量。">
-<title>加密星球小鎮</title>
+<meta name="description" content="Crypto markets as a tiny solar system: one planet per sector, one shop per coin.">
+<title>Crypto Planet Town</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;600;800&display=swap">
@@ -16,53 +16,57 @@
 <div class="vignette"></div>
 
 <header id="brand" class="panel">
-  <h1>加密星球小鎮</h1>
-  <p id="view-title">太陽系・點選星球進入</p>
-  <p id="status" class="label">載入行情中…</p>
+  <h1 data-i18n="app.title"></h1>
+  <p id="view-title"></p>
+  <p id="status" class="label"></p>
 </header>
 
-<button id="back" class="panel chip" type="button" hidden>← 返回太陽系</button>
+<div id="top-actions">
+  <button id="back" class="panel chip" type="button" hidden></button>
+  <button id="lang" class="panel chip" type="button"></button>
+</div>
 
 <aside id="coin-card" class="panel" hidden aria-live="polite">
-  <button id="coin-close" class="close" type="button" aria-label="關閉">×</button>
+  <button id="coin-close" class="close" type="button" data-i18n-aria="card.close">×</button>
   <div class="coin-head">
     <span id="coin-rank" class="label"></span>
     <h2 id="coin-symbol"></h2>
     <span id="coin-name" class="muted"></span>
+    <span id="coin-tier" class="tier-badge"></span>
   </div>
   <div class="coin-price">
     <span id="coin-price"></span>
     <span id="coin-change"></span>
   </div>
   <dl class="coin-stats">
-    <div><dt>市值</dt><dd id="coin-mcap"></dd></div>
-    <div><dt>24h 成交額</dt><dd id="coin-volume"></dd></div>
-    <div><dt>主動買入</dt><dd id="coin-buy" class="up"></dd></div>
-    <div><dt>主動賣出</dt><dd id="coin-sell" class="down"></dd></div>
-    <div><dt>買方佔比</dt><dd id="coin-share"></dd></div>
-    <div><dt>24h 成交筆數</dt><dd id="coin-trades"></dd></div>
+    <div><dt data-i18n="card.mcap"></dt><dd id="coin-mcap"></dd></div>
+    <div><dt data-i18n="card.volume"></dt><dd id="coin-volume"></dd></div>
+    <div><dt data-i18n="card.buy"></dt><dd id="coin-buy" class="up"></dd></div>
+    <div><dt data-i18n="card.sell"></dt><dd id="coin-sell" class="down"></dd></div>
+    <div><dt data-i18n="card.share"></dt><dd id="coin-share"></dd></div>
+    <div><dt data-i18n="card.trades"></dt><dd id="coin-trades"></dd></div>
   </dl>
   <p class="label" id="coin-pair"></p>
 </aside>
 
-<nav id="coin-strip" class="panel" aria-label="幣種" hidden></nav>
+<nav id="coin-strip" class="panel" data-i18n-aria="strip.label" hidden></nav>
 
 <footer id="controls" class="panel">
-  <div class="speed" role="group" aria-label="播放速度">
+  <div class="speed" role="group" data-i18n-aria="speed.label">
     <button type="button" data-speed="0">❚❚</button>
     <button type="button" data-speed="1" class="active">1×</button>
     <button type="button" data-speed="3">3×</button>
     <button type="button" data-speed="10">10×</button>
   </div>
   <p class="legend">
-    <span><i class="dot up"></i>右側隊伍＝主動買入</span>
-    <span><i class="dot down"></i>左側＝主動賣出</span>
-    <span><i class="dot walker"></i>路人＝成交量</span>
+    <span><i class="dot up"></i><span data-i18n="legend.buy"></span></span>
+    <span><i class="dot down"></i><span data-i18n="legend.sell"></span></span>
+    <span><i class="dot walker"></i><span data-i18n="legend.walkers"></span></span>
   </p>
 </footer>
 
 <div id="toast" class="panel" role="status" hidden></div>
-<div id="loading"><div class="spinner"></div>載入行情中…</div>
+<div id="loading"><div class="spinner"></div><span data-i18n="status.loading"></span></div>
 
 <script type="module" src="./src/main.js"></script>
 </body>
