@@ -1,0 +1,180 @@
+:root {
+  --bg: #070b14;
+  --panel: rgba(12, 17, 27, 0.78);
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #edf2f5;
+  --muted: #8b99a5;
+  --accent: #4cc2ff;
+  --up: #16c784;
+  --down: #ea3943;
+  --flat: #9aa4ae;
+  --sans: "Outfit", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --st: env(safe-area-inset-top, 0px);
+  --sb: env(safe-area-inset-bottom, 0px);
+  --sl: env(safe-area-inset-left, 0px);
+  --sr: env(safe-area-inset-right, 0px);
+  --gutter: 20px;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  overflow: hidden; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+}
+#stage { position: fixed; inset: 0; }
+#stage canvas { display: block; touch-action: none; }
+.labels-layer { position: fixed !important; inset: 0; pointer-events: none; }
+.vignette {
+  position: fixed; inset: 0; pointer-events: none;
+  background: radial-gradient(80% 60% at 0% 0%, rgba(3, 5, 10, 0.6), transparent 60%),
+    linear-gradient(to top, rgba(3, 5, 10, 0.55), transparent 28%);
+}
+[hidden] { display: none !important; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--muted); margin: 0; }
+.muted { color: var(--muted); }
+.up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--flat); }
+
+#brand {
+  position: fixed; left: calc(var(--sl) + var(--gutter)); top: calc(var(--st) + var(--gutter));
+  padding: 14px 18px; max-width: min(360px, calc(100vw - 2 * var(--gutter)));
+}
+#brand h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--accent); }
+#view-title { margin: 4px 0 6px; font-size: 14px; }
+
+.chip {
+  color: var(--text); font: 600 14px var(--sans); padding: 10px 16px; cursor: pointer;
+  min-height: 44px;
+}
+#top-actions {
+  position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + var(--gutter));
+  display: flex; gap: 8px;
+}
+#top-actions .chip:hover { border-color: var(--accent); }
+#lang, #theme { min-width: 48px; font-family: var(--mono); }
+.tier-badge {
+  margin-left: auto; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  color: var(--accent); background: rgba(76, 194, 255, 0.12); border: 1px solid rgba(76, 194, 255, 0.3);
+}
+
+#coin-card, #park-card {
+  position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + 84px);
+  width: 300px; padding: 18px 18px 14px;
+}
+.close {
+  position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--muted); font-size: 22px; cursor: pointer;
+}
+.close:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.coin-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding-right: 32px; }
+.coin-head h2 { margin: 0; font-size: 28px; font-weight: 800; }
+.coin-price { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 0 12px; }
+#coin-price { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#coin-change { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.coin-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 0 0 12px; }
+.coin-stats dt { font-size: 11px; color: var(--muted); }
+.coin-stats dd { margin: 2px 0 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+#controls {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--sb) + var(--gutter)); display: flex; align-items: center; gap: 16px;
+  padding: 8px 14px; max-width: calc(100vw - 2 * var(--gutter));
+}
+.speed { display: flex; gap: 4px; }
+.speed button {
+  min-width: 44px; min-height: 40px; border: 1px solid transparent; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04); color: var(--muted); font: 600 13px var(--mono); cursor: pointer;
+}
+.speed button.active { color: var(--text); border-color: var(--accent); background: rgba(76, 194, 255, 0.12); }
+.legend { display: flex; gap: 14px; margin: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.dot.up { background: var(--up); } .dot.down { background: var(--down); } .dot.walker { background: #c9d3dd; }
+
+.planet-label {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 12px;
+  pointer-events: auto; cursor: pointer; text-align: center; user-select: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+.planet-label strong { font-size: 15px; font-weight: 800; }
+.planet-label span { font-size: 11px; color: var(--muted); }
+.planet-label.locked strong { color: var(--muted); }
+.planet-label:hover strong { color: var(--accent); }
+
+#coin-strip {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--sb) + var(--gutter) + 66px);
+  display: flex; gap: 4px; padding: 6px; max-width: calc(100vw - 2 * var(--gutter));
+  overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+#coin-strip::-webkit-scrollbar { display: none; }
+#coin-strip button {
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: 64px; min-height: 44px; padding: 5px 10px; border: 1px solid transparent; border-radius: 10px;
+  background: transparent; color: var(--text); font: 700 13px var(--sans); cursor: pointer;
+}
+#coin-strip button small { font: 500 11px var(--mono); }
+.scope-note {
+  margin: 4px 0 8px; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  color: #f2c14e; background: rgba(242, 193, 78, 0.1); border: 1px solid rgba(242, 193, 78, 0.3);
+}
+.park-top { margin: 4px 0 10px; padding-left: 20px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.park-top li { margin: 2px 0; }
+.park-top .down { margin-left: 8px; } .park-top .up { margin-left: 6px; }
+#coin-strip button.park-btn { color: #e6c25a; }
+#park-card .label + .label { margin-top: 4px; }
+#coin-strip button:hover { background: rgba(255, 255, 255, 0.06); }
+#coin-strip button[aria-current="true"] { border-color: var(--accent); background: rgba(76, 194, 255, 0.12); }
+
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--sb) + 96px);
+  padding: 10px 16px; font-size: 14px;
+}
+
+#loading {
+  position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px;
+  background: var(--bg); color: var(--muted); font-size: 14px; transition: opacity 0.5s;
+}
+#loading.done { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 手機：資訊卡改成底部抽屜，控制列縮小 */
+@media (max-width: 720px) {
+  :root { --gutter: 12px; }
+  #brand { padding: 8px 12px; max-width: calc(100vw - 2 * var(--gutter) - 150px); border-radius: 12px; }
+  #brand h1 { font-size: 16px; }
+  #view-title { font-size: 12px; margin: 2px 0 3px; }
+  #status { font-size: 10px; letter-spacing: 0.02em; }
+  #top-actions .chip { padding: 10px 12px; font-size: 13px; }
+  #top-actions { flex-direction: column; align-items: flex-end; }
+  #coin-card, #park-card {
+    left: calc(var(--sl) + var(--gutter)); right: calc(var(--sr) + var(--gutter)); top: auto; width: auto;
+    bottom: calc(var(--sb) + 136px); padding: 14px 14px 10px;
+  }
+  .coin-head h2 { font-size: 20px; }
+  #coin-pair { display: none; }
+  /* 公園資訊卡內容較多：限制高度可捲動，並隱藏圖例，避免蓋住整個公園 */
+  #park-card { max-height: 38vh; overflow-y: auto; }
+  #park-card .label[data-i18n="park.legend"] { display: none; }
+  #coin-price { font-size: 20px; }
+  .coin-stats { gap: 6px 10px; margin-bottom: 8px; }
+  .coin-stats dt { font-size: 10px; }
+  .coin-stats dd { font-size: 13px; }
+  .coin-price { margin: 2px 0 8px; }
+  #coin-strip { bottom: calc(var(--sb) + var(--gutter) + 58px); }
+  .coin-stats { grid-template-columns: repeat(3, 1fr); }
+  #toast { bottom: calc(var(--sb) + 136px); }
+  .legend { display: none; }
+  #controls { gap: 8px; padding: 6px 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "crypto-planet",
+  "version": "1.0.0",
+  "description": "加密貨幣星球小鎮：每個分類一顆星球，每個幣種一間店。",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "e2e": "playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@vitest/coverage-v8": "^5.0.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  },
+  "private": true
+}
