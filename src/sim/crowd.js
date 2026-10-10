@@ -17,9 +17,6 @@ export const LAYOUT = Object.freeze({
   walkSpeed: 0.55,
   queueSpeed: 0.9,
   arriveEpsilon: 0.02,
-  /** 附近有隕石落地時，路人加速散開的秒數與倍率 */
-  startleSeconds: 2.5,
-  startleSpeed: 2.6,
 });
 
 const SIDES = Object.freeze({ buy: 1, sell: -1 });
@@ -74,7 +71,7 @@ export function createShopSim(initial, rng) {
   let agents = [];
   const stats = { served: 0 };
   const timers = { buy: params.callInterval, sell: params.callInterval * 0.5 };
-  let panicLeft = 0;
+
 
   const makeAgent = (kind, state, pos, extra = {}) => ({
     id: nextId++, kind, state, x: pos.x, z: pos.z, heading: 0, moving: false,
@@ -124,9 +121,7 @@ export function createShopSim(initial, rng) {
   /** 更新單一 agent；回傳 false 表示要移除。新產生的離場者放進 spawned */
   const stepAgent = (a, dt, spawned) => {
     if (a.state === 'walking') {
-      const panic = Math.min(dt, panicLeft) / dt;
-      const speed = LAYOUT.walkSpeed * a.speedJitter * (1 + panic * (LAYOUT.startleSpeed - 1));
-      a.s += a.dir * speed * dt;
+      a.s += a.dir * LAYOUT.walkSpeed * a.speedJitter * dt;
       const p = loopPoint(a.s);
       a.heading = Math.atan2(p.x - a.x, p.z - a.z);
       a.x = p.x;
@@ -160,7 +155,6 @@ export function createShopSim(initial, rng) {
     if (!(dt > 0)) return;
     const spawned = [];
     agents = [...agents.filter((a) => stepAgent(a, dt, spawned)), ...spawned];
-    panicLeft = Math.max(0, panicLeft - dt);
     for (const kind of ['buy', 'sell']) {
       timers[kind] -= dt;
       while (timers[kind] <= 0) {
@@ -190,6 +184,5 @@ export function createShopSim(initial, rng) {
     stats,
     step,
     update,
-    startle() { panicLeft = LAYOUT.startleSeconds; },
   };
 }

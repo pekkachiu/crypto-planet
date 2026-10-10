@@ -17,7 +17,6 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
   let lastStatus = null;
   let lastView = { mode: 'solar' };
   let lastCoin = null;
-  let lastLiq = { long: 0, short: 0 };
 
   $('back').addEventListener('click', onBack);
   $('lang').addEventListener('click', onToggleLang);
@@ -80,8 +79,6 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
     $('coin-share').textContent = buyShare(coin);
     $('coin-trades').textContent = formatCount(coin.trades);
     $('coin-pair').textContent = t('card.pair', { pair: coin.pair });
-    $('coin-liq-long').textContent = formatUsd(lastLiq.long);
-    $('coin-liq-short').textContent = formatUsd(lastLiq.short);
   };
 
   /** 靜態文字：data-i18n 寫入內文、data-i18n-aria 寫入 aria-label */
@@ -105,10 +102,8 @@ export function createUI({ t: initialT, lang: initialLang, onBack, onSpeed, onCl
     renderView();
   };
 
-  /** liq：開站以來這個幣的爆倉累計 { long, short } */
-  const showCoin = (mapped, liq = { long: 0, short: 0 }) => {
+  const showCoin = (mapped) => {
     lastCoin = mapped;
-    lastLiq = liq;
     renderCoin();
     $('coin-card').hidden = false;
   };

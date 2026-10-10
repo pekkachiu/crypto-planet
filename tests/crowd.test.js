@@ -95,21 +95,6 @@ describe('createShopSim', () => {
     expect(count(sim, 'walker')).toBe(9);
   });
 
-  it('受到驚嚇時路人加速散開，一段時間後恢復', () => {
-    const calm = createShopSim(params(), createRng(5));
-    const scared = createShopSim(params(), createRng(5));
-    scared.startle();
-    const walked = (sim) => {
-      const before = sim.agents.filter((a) => a.kind === 'walker').map((a) => a.s);
-      sim.step(0.5);
-      const after = sim.agents.filter((a) => a.kind === 'walker').map((a) => a.s);
-      return after.reduce((sum, s, i) => sum + Math.abs(s - before[i]), 0);
-    };
-    expect(walked(scared)).toBeGreaterThan(walked(calm) * 1.8);
-    scared.step(LAYOUT.startleSeconds);
-    expect(walked(scared)).toBeCloseTo(walked(calm), 5);
-  });
-
   it('step(0) 或負數不會改變狀態', () => {
     const sim = createShopSim(params(), createRng(1));
     const before = JSON.stringify(sim.agents);
