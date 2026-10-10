@@ -126,6 +126,7 @@ test('爆倉公園：從幣種列進入，資訊卡顯示 OKX 24h 多空金額',
   await expect(page.locator('#park-share')).toHaveText('100.0%');
   await expect(page.locator('#park-top li').first()).toContainText('BTC');
   await expect(page.locator('#park-source')).toContainText('OKX');
+  await expect(page.locator('#park-card .scope-note')).toHaveText('⚠ 僅 OKX 交易所資料，非全網爆倉');
   await expect(page.locator('#view-title')).toContainText('爆倉公園');
 
   await page.locator('#back').click();
