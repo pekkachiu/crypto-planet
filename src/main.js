@@ -32,8 +32,11 @@ const MAJOR_TERRAIN_SEED = 118;
 const SHOP_DISTANCE = { min: 2.2, max: 24 };
 /** 繞店旋轉時，鏡頭最低只到接近地平線，不會鑽到地底 */
 const SHOP_MAX_POLAR = 1.38;
-/** 進入星球時的鏡頭位置（相對星球中心，以半徑為單位）：從南方斜上看北半球的小鎮 */
-const PLANET_VIEW = new THREE.Vector3(0, 2.9, 2.2);
+/**
+ * 進入星球時的鏡頭（以半徑為單位、相對星球中心）：從南方低角度斜看北半球的小鎮，
+ * 注視點抬到小鎮所在的高度，看到的是店面正面與天際線，而不是一片屋頂。
+ */
+const PLANET_VIEW = Object.freeze({ camera: new THREE.Vector3(0, 1.3, 2.8), target: new THREE.Vector3(0, 0.6, 0) });
 
 // ---------- 渲染器與場景 ----------
 const stage = document.getElementById('stage');
@@ -157,8 +160,9 @@ function planetDistance(planet) {
 
 function planetShot(planet) {
   const center = planet.group.position.clone();
-  const offset = PLANET_VIEW.clone().multiplyScalar(planet.radius * fitFactor());
-  return { position: center.clone().add(offset), target: center, up: WORLD_UP };
+  const target = center.clone().addScaledVector(PLANET_VIEW.target, planet.radius);
+  const offset = PLANET_VIEW.camera.clone().sub(PLANET_VIEW.target).multiplyScalar(planet.radius * fitFactor());
+  return { position: target.clone().add(offset), target, up: WORLD_UP };
 }
 
 /** 店門口特寫：站在店的正前方（南側）斜上方，上方向是該處地面法線 */
