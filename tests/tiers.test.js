@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tierOf, tierProgress, TIERS } from '../src/data/tiers.js';
+import { tierOf, tierProgress, TIERS, ETF_TIERS } from '../src/data/tiers.js';
 
 describe('tierOf', () => {
   it('依絕對市值分四級', () => {
@@ -29,5 +29,14 @@ describe('tierProgress', () => {
   it('超出最上級或最下級時夾在 0～1', () => {
     expect(tierProgress(1e14)).toBe(1);
     expect(tierProgress(1)).toBe(0);
+  });
+});
+
+describe('ETF_TIERS', () => {
+  it('ETF 依資產規模分級：≥$50B、≥$10B、≥$1B、其他', () => {
+    expect([8e10, 5e10, 1.5e10, 3e9, 1.5e8].map((v) => tierOf(v, ETF_TIERS))).toEqual([1, 1, 2, 3, 4]);
+  });
+  it('級距內位置也依 ETF 級距計算', () => {
+    expect(tierProgress(1e10, ETF_TIERS)).toBeCloseTo(0);
   });
 });

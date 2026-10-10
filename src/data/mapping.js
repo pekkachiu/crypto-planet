@@ -1,4 +1,5 @@
 import { tierOf, tierProgress } from './tiers.js';
+import { formatPrice, formatPct } from '../ui/format.js';
 
 /** 資料 → 畫面參數的換算範圍 */
 export const RANGES = Object.freeze({
@@ -52,6 +53,7 @@ export function mapTown(coins) {
     tier: tierOf(coin.marketCap),
     tierProgress: tierProgress(coin.marketCap),
     trend: trendOf(coin.change24h),
+    sign: { rank: coin.rank, symbol: coin.symbol, primary: formatPrice(coin.price), secondary: formatPct(coin.change24h) },
   }));
 }
 
