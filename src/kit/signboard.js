@@ -41,14 +41,15 @@ export function createSignboard() {
     ctx.fillText(`#${rank}`, 34, 70);
     ctx.fillStyle = '#2b2d42';
     ctx.font = `800 76px ${FONT}`;
-    ctx.fillText(symbol, 110, 82);
+    ctx.fillText(symbol, 110, 82, W - 144);
 
     ctx.font = `600 54px ${FONT}`;
-    ctx.fillText(primary, 34, 168);
+    // 下排左右兩欄各自限制寬度，數字變長時壓窄而不是疊在一起
+    ctx.fillText(primary, 34, 168, W * 0.5);
     ctx.textAlign = 'right';
     ctx.fillStyle = TREND_TEXT[trend];
     ctx.font = `700 46px ${FONT}`;
-    ctx.fillText(secondary, W - 34, 168);
+    ctx.fillText(secondary, W - 34, 168, W * 0.4);
     ctx.textAlign = 'left';
     texture.needsUpdate = true;
   };

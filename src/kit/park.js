@@ -125,15 +125,16 @@ function createParkSign() {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#8a8478';
     ctx.font = `600 34px ${FONT}`;
-    ctx.fillText(t('park.signTitle'), W / 2, 62);
+    // 指定最大寬度：英文標籤較長時自動壓窄，左右兩欄不會疊在一起
+    ctx.fillText(t('park.signTitle'), W / 2, 62, W - 60);
     ctx.fillStyle = '#2b2d42';
     ctx.font = `800 72px ${FONT}`;
-    ctx.fillText(formatUsd(long + short), W / 2, 142);
+    ctx.fillText(formatUsd(long + short), W / 2, 142, W - 60);
     ctx.font = `700 38px ${FONT}`;
     ctx.fillStyle = '#d63340';
-    ctx.fillText(`${t('park.long')} ${formatUsd(long)}`, W * 0.28, 212);
+    ctx.fillText(`${t('park.long')} ${formatUsd(long)}`, W * 0.28, 212, W * 0.42);
     ctx.fillStyle = '#0f9d63';
-    ctx.fillText(`${t('park.short')} ${formatUsd(short)}`, W * 0.72, 212);
+    ctx.fillText(`${t('park.short')} ${formatUsd(short)}`, W * 0.72, 212, W * 0.42);
     texture.needsUpdate = true;
   };
   return { sprite, draw };
