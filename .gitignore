@@ -4,3 +4,9 @@ coverage/
 test-results/
 playwright-report/
 .DS_Store
+
+# 由 scripts/fetch-etf.mjs 產生，跟著部署，不進版本控制
+public/data/
+# 本機 API Key
+.env
+.env.*
