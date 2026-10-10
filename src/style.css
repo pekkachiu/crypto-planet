@@ -1,0 +1,10 @@
+:root {
+  --bg: #070b14;
+  --text: #edf2f5;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); overflow: hidden; font-family: system-ui, "PingFang TC", "Noto Sans TC", sans-serif; }
+#stage { position: fixed; inset: 0; }
+#stage canvas { display: block; touch-action: none; }
