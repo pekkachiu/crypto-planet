@@ -11,8 +11,8 @@ import { PALETTE, pastel } from '../kit/materials.js';
 import { TREND_COLORS, coinColor, walkerColor } from '../kit/palette.js';
 import { createPark } from '../kit/park.js';
 
-/** 店面分布的球帽下緣（y 座標），排名越前越靠近北極 */
-const CAP_MIN_Y = 0.05;
+/** 店面分布到整顆星球（y 從北極 1 到南極 -1），排名越前越靠近北極的公園 */
+const CAP_MIN_Y = -1;
 /** 廣場半徑：要蓋住整圈人行道（店外 2.8 × 3.6 的環形路線） */
 export const PLAZA_RADIUS = 3.9;
 const SIGN_GAP = 1.0;

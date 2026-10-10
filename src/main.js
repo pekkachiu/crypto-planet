@@ -47,10 +47,10 @@ const SHOP_DISTANCE = { min: 2.2, max: 24 };
 /** 繞店旋轉時，鏡頭最低只到接近地平線，不會鑽到地底 */
 const SHOP_MAX_POLAR = 1.38;
 /**
- * 進入星球時的鏡頭（以半徑為單位、相對星球中心）：從南方低角度斜看北半球的小鎮，
- * 注視點抬到小鎮所在的高度，看到的是店面正面與天際線，而不是一片屋頂。
+ * 進入星球時的鏡頭（以半徑為單位、相對星球中心）：從南方斜上方看整顆星球，
+ * 北極的公園與天際線在上緣，店面分散在整顆星球上，可拖曳旋轉瀏覽。
  */
-const PLANET_VIEW = Object.freeze({ camera: new THREE.Vector3(0, 1.3, 2.8), target: new THREE.Vector3(0, 0.6, 0) });
+const PLANET_VIEW = Object.freeze({ camera: new THREE.Vector3(0, 1.3, 2.8), target: new THREE.Vector3(0, 0, 0) });
 
 // ---------- 渲染器與場景 ----------
 const stage = document.getElementById('stage');
