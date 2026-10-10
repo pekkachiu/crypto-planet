@@ -40,13 +40,19 @@ const scratch = {
   pos: new THREE.Vector3(),
   quat: new THREE.Quaternion(),
   scale: new THREE.Vector3(1, 1, 1),
-  color: new THREE.Color(),
 };
 
+// 預先建好顏色物件，每幀上千人不必重複解析色碼字串
+const BUY_COLOR = new THREE.Color(TREND_COLORS.up);
+const SELL_COLOR = new THREE.Color(TREND_COLORS.down);
+const walkerColors = new Map();
+
 function agentColor(agent) {
-  if (agent.kind === 'buy') return TREND_COLORS.up;
-  if (agent.kind === 'sell') return TREND_COLORS.down;
-  return walkerColor(agent.tint);
+  if (agent.kind === 'buy') return BUY_COLOR;
+  if (agent.kind === 'sell') return SELL_COLOR;
+  const hex = walkerColor(agent.tint);
+  if (!walkerColors.has(hex)) walkerColors.set(hex, new THREE.Color(hex));
+  return walkerColors.get(hex);
 }
 
 /**
@@ -59,9 +65,14 @@ export function createTown(planetGroup, radius) {
   let shops = [];
   let crowd = null;
 
-  const build = (count) => {
+  const disposeAll = () => {
+    shops.forEach((s) => { s.shop.dispose(); s.sign.dispose(); s.plaza.geometry.dispose(); s.plaza.material.dispose(); });
+    crowd?.dispose();
     root.clear();
-    shops.forEach((s) => { s.shop.dispose(); s.sign.dispose(); });
+  };
+
+  const build = (count) => {
+    disposeAll();
     crowd = createCrowdMesh(count * MAX_PER_SHOP);
     root.add(crowd.group);
     shops = capPoints(count, CAP_MIN_Y).map((p, i) => {
@@ -70,9 +81,10 @@ export function createTown(planetGroup, radius) {
       const shop = createShop();
       const sign = createSignboard();
       shop.group.userData.shopIndex = i;
+      const plaza = createPlaza(radius, normal);
       anchor.add(shop.group, sign.sprite);
-      root.add(createPlaza(radius, normal), anchor);
-      return { anchor, shop, sign, sim: null, mapped: null };
+      root.add(plaza, anchor);
+      return { anchor, shop, sign, plaza, sim: null, mapped: null };
     });
   };
 
@@ -84,6 +96,7 @@ export function createTown(planetGroup, radius) {
       s.mapped = mapped;
       s.shop.setStyle({ color, trendColor: TREND_COLORS[mapped.trend] });
       s.sign.draw(mapped.coin, mapped.trend, color);
+      s.color = color;
       if (s.sim) s.sim.update(mapped);
       else s.sim = createShopSim(mapped, createRng(i + 1));
       s.shop.group.scale.setScalar(mapped.shopScale);
@@ -106,17 +119,25 @@ export function createTown(planetGroup, radius) {
         scratch.quat.setFromAxisAngle(UP, a.heading);
         scratch.local.compose(scratch.pos, scratch.quat, scratch.scale);
         scratch.world.multiplyMatrices(s.anchor.matrix, scratch.local);
-        crowd.push(scratch.world, scratch.color.set(agentColor(a)));
+        crowd.push(scratch.world, agentColor(a));
       }
     }
     crowd.end();
   };
 
-  /** 點擊判定：回傳被點到的店面索引，沒點到回傳 -1 */
+  const sphere = new THREE.Sphere(new THREE.Vector3(), radius);
+  const sphereHit = new THREE.Vector3();
+
+  /** 點擊判定：回傳被點到的店面索引，沒點到回傳 -1；被星球擋住的背面店面不算 */
   const pick = (raycaster) => {
     const targets = shops.flatMap((s) => [s.shop.group, s.sign.sprite]);
     const hit = raycaster.intersectObjects(targets, true)[0];
     if (!hit) return -1;
+    planetGroup.getWorldPosition(sphere.center);
+    if (raycaster.ray.intersectSphere(sphere, sphereHit)) {
+      const planetDistance = raycaster.ray.origin.distanceTo(sphereHit);
+      if (hit.distance > planetDistance + 0.5) return -1;
+    }
     return shops.findIndex((s) => s.shop.group === hit.object.parent || s.sign.sprite === hit.object);
   };
 
@@ -139,6 +160,10 @@ export function createTown(planetGroup, radius) {
     render,
     pick,
     shopFrame,
+    /** 網頁字型載入完成後重畫招牌，避免先用備用字型畫好就一直停在那 */
+    redrawSigns() {
+      for (const s of shops) if (s.mapped) s.sign.draw(s.mapped.coin, s.mapped.trend, s.color);
+    },
     mappedAt(index) { return shops[index]?.mapped ?? null; },
     indexOf(coinId) { return shops.findIndex((s) => s.mapped?.coin.id === coinId); },
     /** 遠景時只隱藏人潮（省效能），店面與招牌保持顯示 */

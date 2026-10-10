@@ -92,5 +92,8 @@ export function createUI({ onBack, onSpeed, onClose, onPickCoin }) {
     hideCoin() { $('coin-card').hidden = true; },
     toast,
     doneLoading() { $('loading').classList.add('done'); },
+    failLoading(message) {
+      $('loading').replaceChildren(message);
+    },
   };
 }

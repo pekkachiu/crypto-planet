@@ -72,12 +72,13 @@ addEventListener('resize', () => {
   composer.setSize(innerWidth, innerHeight);
   bloom.resolution.set(innerWidth * QUALITY.bloomScale, innerHeight * QUALITY.bloomScale);
   labelRenderer.setSize(innerWidth, innerHeight);
+  refreshDistance();
 });
 
 // ---------- 狀態 ----------
 const rig = createCameraRig(camera, controls);
 /** view：solar（太陽系）→ planet（星球全景）→ shop（店門口特寫）；飛行中為 flying */
-const state = { view: 'solar', speed: 1, simTime: 0, shopIndex: -1, focused: null };
+const state = { view: 'solar', speed: 1, simTime: 0, shopCoinId: null, focused: null };
 let solar = null;
 let town = null;
 let majorRadius = 0;
@@ -85,7 +86,7 @@ let majorRadius = 0;
 const ui = createUI({
   onBack: () => goBack(),
   onSpeed: (speed) => { state.speed = speed; },
-  onClose: () => { if (state.view === 'shop') goBack(); else ui.hideCoin(); },
+  onClose: () => { if (state.view === 'shop') goBack(); },
   onPickCoin: (index) => enterShop(index),
 });
 
@@ -109,6 +110,12 @@ async function fly(view, shot, distance, maxPolar) {
   await rig.flyTo(shot);
   setDistance(distance, maxPolar);
   state.view = view;
+}
+
+/** 手機轉向後重新套用目前視角的縮放範圍 */
+function refreshDistance() {
+  if (state.view === 'planet') setDistance(planetDistance(state.focused));
+  else if (state.view === 'shop') setDistance(SHOP_DISTANCE, SHOP_MAX_POLAR);
 }
 
 function planetDistance(planet) {
@@ -147,16 +154,16 @@ async function enterPlanet(planet) {
 async function enterShop(index) {
   if (state.view !== 'planet' && state.view !== 'shop') return;
   const mapped = town.mappedAt(index);
-  state.shopIndex = index;
-  ui.showCoin(mapped);
+  state.shopCoinId = mapped.coin.id;
   ui.setCoins(townData, mapped.coin.id);
   await fly('shop', shopShot(index), SHOP_DISTANCE, SHOP_MAX_POLAR);
+  ui.showCoin(mapped);
   ui.setView('shop', state.focused.config, mapped.coin);
 }
 
 async function goBack() {
   if (state.view === 'shop') {
-    state.shopIndex = -1;
+    state.shopCoinId = null;
     ui.hideCoin();
     ui.setCoins(townData, null);
     const planet = state.focused;
@@ -178,11 +185,13 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let down = null;
 
+// 只認主要手指；雙指縮放時放開的那根手指不算點擊
 renderer.domElement.addEventListener('pointerdown', (e) => {
-  down = { x: e.clientX, y: e.clientY, t: performance.now() };
+  down = e.isPrimary ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() } : null;
 });
+renderer.domElement.addEventListener('pointercancel', () => { down = null; });
 renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!down || !solar) return;
+  if (!down || down.id !== e.pointerId || !solar) return;
   const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
   const quick = performance.now() - down.t < TAP.maxMs;
   down = null;
@@ -212,22 +221,41 @@ labelRenderer.domElement.addEventListener('click', (e) => {
 // ---------- 資料 ----------
 let townData = [];
 
+let lastLiveAt = null;
+let refreshing = false;
+
 function applyData(coins) {
   townData = mapTown(coins);
   town.setData(townData);
-  // 排名變動時，資訊卡跟著鏡頭正在看的那間店
-  const current = town.mappedAt(state.shopIndex);
-  if (current) ui.showCoin(current);
-  ui.setCoins(townData, current?.coin.id ?? null);
+  ui.setCoins(townData, state.shopCoinId);
+  if (state.view !== 'shop') return;
+  // 店面特寫中：排名變動就跟著那個幣飛到新位置；幣跌出前十就回到星球
+  const index = town.indexOf(state.shopCoinId);
+  if (index < 0) {
+    goBack();
+    return;
+  }
+  ui.showCoin(town.mappedAt(index));
+  fly('shop', shopShot(index), SHOP_DISTANCE, SHOP_MAX_POLAR);
 }
 
 async function refresh() {
-  const result = await loadTopCoins();
-  if (result.source === 'live') {
-    applyData(result.coins);
-    ui.setStatus(result);
-  } else {
-    ui.setStatus(result, { keptPrevious: townData.length > 0 });
+  // 背景分頁不更新；上一輪還沒完成就跳過，避免請求重疊被 API 限流
+  if (refreshing || document.hidden || state.view === 'flying') return;
+  refreshing = true;
+  try {
+    const result = await loadTopCoins();
+    if (result.source === 'live') {
+      applyData(result.coins);
+      lastLiveAt = result.updatedAt;
+      ui.setStatus(result);
+    } else {
+      ui.setStatus({ ...result, updatedAt: lastLiveAt ?? result.updatedAt }, { keptPrevious: townData.length > 0 });
+    }
+  } catch (err) {
+    console.error('[crypto-planet] 更新失敗', err);
+  } finally {
+    refreshing = false;
   }
 }
 
@@ -238,7 +266,9 @@ async function start() {
   solar = createSolarSystem(scene, { major: majorRadius });
   town = createTown(solar.planets.get('major').group, majorRadius);
   applyData(first.coins);
+  if (first.source === 'live') lastLiveAt = first.updatedAt;
   ui.setStatus(first);
+  document.fonts?.ready.then(() => town.redrawSigns());
   ui.setView('solar');
   ui.doneLoading();
   setInterval(refresh, REFRESH_MS);
@@ -258,12 +288,15 @@ function frame() {
   if (rig.flying) rig.update(dt);
   else controls.update();
 
-  town.step(simDt);
   const major = solar.planets.get('major');
   const crowdRange = majorRadius * CROWD_VISIBLE_FACTOR * fitFactor();
   const nearTown = camera.position.distanceTo(major.group.position) < crowdRange;
   town.setCrowdVisible(nearTown);
-  if (nearTown) town.render();
+  // 看不到人潮時暫停模擬，省手機電量
+  if (nearTown) {
+    town.step(simDt);
+    town.render();
+  }
 
   composer.render();
   labelRenderer.render(scene, camera);
@@ -271,5 +304,5 @@ function frame() {
 
 start().catch((err) => {
   console.error('[crypto-planet] 啟動失敗', err);
-  ui.toast('啟動失敗，請重新整理頁面');
+  ui.failLoading('啟動失敗，請重新整理頁面');
 });

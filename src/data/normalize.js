@@ -31,12 +31,19 @@ export function pickCandidates(markets) {
     .toSorted((a, b) => a.market_cap_rank - b.market_cap_rank);
 }
 
+/** Number(null) 與 Number('') 都是 0，要先擋掉 */
+function toNumber(value) {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim() !== '') return Number(value);
+  return NaN;
+}
+
 export function parseKlines(rows) {
   if (!Array.isArray(rows)) throw new Error('K 線資料格式錯誤：不是陣列');
   return rows.reduce((acc, row) => {
-    const quote = Number(row?.[KLINE.quoteVolume]);
-    const buy = Number(row?.[KLINE.takerBuyQuote]);
-    const trades = Number(row?.[KLINE.trades]);
+    const quote = toNumber(row?.[KLINE.quoteVolume]);
+    const buy = toNumber(row?.[KLINE.takerBuyQuote]);
+    const trades = toNumber(row?.[KLINE.trades]);
     if (![quote, buy, trades].every(Number.isFinite)) {
       throw new Error('K 線資料格式錯誤：欄位不是數字');
     }

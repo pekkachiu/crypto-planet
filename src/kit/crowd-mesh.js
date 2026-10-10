@@ -39,5 +39,11 @@ export function createCrowdMesh(max) {
       heads.instanceMatrix.needsUpdate = true;
       bodies.instanceColor.needsUpdate = true;
     },
+    dispose() {
+      for (const mesh of [bodies, heads]) {
+        mesh.material.dispose();
+        mesh.dispose();
+      }
+    },
   };
 }

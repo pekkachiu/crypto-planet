@@ -58,6 +58,10 @@ describe('parseKlines', () => {
     expect(() => parseKlines('oops')).toThrow(/K 線/);
     expect(() => parseKlines([['bad']])).toThrow(/K 線/);
   });
+  it('null 或空字串不會被當成 0 混過去', () => {
+    const row = [0, '1', '1', '1', '1', '1', 0, null, 10, '1', '', '0'];
+    expect(() => parseKlines([row])).toThrow(/K 線/);
+  });
 });
 
 describe('buildCoin', () => {
