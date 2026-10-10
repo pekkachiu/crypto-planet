@@ -13,6 +13,7 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
 ```
 
 - 本機預覽請用 `npx vite preview --port 4173`。有 hook 會擋下指令裡出現「npm run dev」字樣的呼叫，包括寫進檔案內容的 heredoc。
+- 本機跑 E2E 時，如果 4173 已經有預覽伺服器，Playwright 會直接沿用（`reuseExistingServer`），測到的是舊的 `dist/`。改完程式先 `npm run build`。
 - zsh 裡不要把迴圈變數取名為 `path`，它會覆蓋 `$PATH`，之後所有指令都會找不到。
 
 ## 架構
@@ -61,6 +62,7 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
 - 人潮模擬為了效能，會在內部就地更新 agent 物件（已在 `crowd.js` 註明）；其他地方維持不可變更新。
 - `camera-rig.js` 直接改 OrbitControls 的內部欄位 `_quat`，依賴 `three@0.170.0`。升級 three 時要一併檢查。
 - **Bloom 門檻 0.95**：只有 `toneMapped: false` 且亮度大於 1 的自發光物件會泛光。白天會亮的東西用 `nightGlow(color, 白天強度, 夜晚強度)`，白天的強度要低於門檻。
+- **鏡頭飛行與日夜淡入淡出用真實經過時間**（`realDt`），模擬時間才限制每幀上限。CI 機器沒有 GPU，每秒只有幾幀，用受限的 dt 會讓 1.6 秒的飛行拖到十幾秒。
 - **E2E 一律攔截外部 API**（見 `e2e/app.spec.js` 的 `offline()`），不依賴網路；用 `dispatchEvent('click')` 點會公轉移動的星球標籤。
 
 ## 視覺驗證

@@ -424,10 +424,12 @@ async function start() {
 const clock = new THREE.Clock();
 
 function frame() {
-  const dt = Math.min(clock.getDelta(), MAX_FRAME_DT);
+  // 鏡頭飛行與日夜淡入淡出用真實經過時間，慢裝置上也會準時結束；模擬時間才限制每幀上限，避免切回分頁時一次跳太多
+  const realDt = clock.getDelta();
+  const dt = Math.min(realDt, MAX_FRAME_DT);
   const targetK = theme === 'night' ? 1 : 0;
   if (nightK !== targetK) {
-    const stepK = dt / THEME_FADE_SECONDS;
+    const stepK = realDt / THEME_FADE_SECONDS;
     nightK = Math.abs(targetK - nightK) <= stepK ? targetK : nightK + Math.sign(targetK - nightK) * stepK;
     applyLook(nightK);
   }
@@ -436,7 +438,7 @@ function frame() {
     state.simTime += simDt;
     solar.update(state.simTime);
   }
-  if (rig.flying) rig.update(dt);
+  if (rig.flying) rig.update(realDt);
   else controls.update();
 
   const major = solar.planets.get('major');

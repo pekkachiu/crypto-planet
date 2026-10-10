@@ -43,6 +43,17 @@ test('點未開放的星球會顯示即將開放提示', async ({ page }) => {
   await expect(page.locator('body')).toHaveAttribute('data-view', 'solar');
 });
 
+test('很慢的裝置（每幀延遲 0.7 秒）上，鏡頭飛行依真實時間結束', async ({ page }) => {
+  // 模擬沒有 GPU 的 CI 機器或低階手機：飛行不能被每幀時間上限拖慢（原本要 16 幀 × 0.7 秒 ≈ 11 秒）
+  await page.addInitScript(() => {
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => setTimeout(() => raf(cb), 700);
+  });
+  await openSolar(page);
+  await page.locator('[data-planet="major"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 6_000 });
+});
+
 test('太陽系 → 主流星 → 店面 → 返回，三層視角都能切換', async ({ page }) => {
   await openSolar(page);
   await page.locator('[data-planet="major"]').dispatchEvent('click');
