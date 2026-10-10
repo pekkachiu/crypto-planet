@@ -9,6 +9,13 @@ export function formatUsd(value) {
   return `$${(value / unit[0]).toPrecision(3)}${unit[1]}`;
 }
 
+/** 帶正負號的金額，例如 ETF 淨流入 +$400M、淨流出 -$123M */
+export function formatSignedUsd(value) {
+  if (!Number.isFinite(value)) return DASH;
+  if (value === 0) return formatUsd(0);
+  return `${value > 0 ? '+' : '-'}${formatUsd(Math.abs(value))}`;
+}
+
 export function formatPrice(value) {
   if (!Number.isFinite(value)) return DASH;
   if (value >= 1000) return `$${Math.round(value).toLocaleString('en-US')}`;

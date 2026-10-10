@@ -14,6 +14,7 @@ import { createTerrainField } from './sim/terrain-field.js';
 import { planetNameKey } from './data/planets.js';
 import { detectLang, createTranslator, STORAGE_KEY } from './i18n/index.js';
 import { loadLiquidations } from './data/okx-liquidations.js';
+import { loadEtfDataset, pickTopEtfs, mapEtfTown } from './data/etf.js';
 import { detectTheme, THEME_STORAGE_KEY } from './ui/theme.js';
 import { applyNight } from './kit/materials.js';
 import { createCameraRig, HOME } from './scenes/camera-rig.js';
@@ -32,6 +33,9 @@ const PLANET_DISTANCE = { min: 1.6, max: 6 };
 /** 注視點在門口隊伍中間（往南 lookAhead）、高度隨建築拉高一點，隊伍與樓頂都入鏡 */
 const SHOP_VIEW = { up: 4.2, back: 7.4, lookRatio: 0.24, minLook: 0.8, lookAhead: 1.4, refHeight: 4.5 };
 const MAJOR_TERRAIN_SEED = 118;
+const ETF_TERRAIN_SEED = 307;
+/** etf.json 由部署流程每天更新兩次，網頁每 30 分鐘重新讀一次就夠 */
+const ETF_REFRESH_MS = 30 * 60_000;
 /** OKX 爆倉歷史每 5 分鐘更新一次（每次要翻好幾頁，不必太頻繁） */
 const LIQ_REFRESH_MS = 5 * 60_000;
 /** 日夜切換的淡入淡出秒數 */
@@ -109,9 +113,12 @@ const rig = createCameraRig(camera, controls);
 /** focusKey：店面特寫時是幣種 id，在公園時是 'park' */
 const state = { view: 'solar', speed: 1, simTime: 0, focusKey: null, focused: null };
 const PARK_KEY = 'park';
+const MAJOR = 'major';
+const ETF = 'etf';
 let solar = null;
-let town = null;
-let majorRadius = 0;
+/** 有小鎮的星球：id → { town, data（換算後的店面清單）, radius } */
+const towns = new Map();
+const townOf = (planet) => towns.get(planet.config.id);
 
 // ---------- 語言 ----------
 const storage = {
@@ -131,7 +138,7 @@ function toggleLang() {
   history.replaceState(null, '', url);
   ui.setLanguage(t, lang);
   solar?.setLanguage(t);
-  town?.redrawPark(t);
+  towns.get(MAJOR)?.town.redrawPark(t);
 }
 
 // ---------- 白天／夜晚 ----------
@@ -232,6 +239,7 @@ function planetShot(planet) {
 const PARK_FRAME_HEIGHT = 8;
 
 function spotShot(target) {
+  const { town } = townOf(state.focused);
   const frame = target.kind === 'park' ? town.parkFrame() : town.shopFrame(target.index);
   const { position, up, south } = frame;
   const height = target.kind === 'park' ? Math.max(PARK_FRAME_HEIGHT, frame.height) : frame.height;
@@ -248,10 +256,13 @@ function spotShot(target) {
 async function enterPlanet(planet) {
   if (state.view !== 'solar') return;
   if (!planet.config.enabled) {
-    ui.toast(t('toast.locked', { planet: t(planetNameKey(planet.config)) }));
+    const key = planet.config.id === ETF ? 'toast.etfUnavailable' : 'toast.locked';
+    ui.toast(t(key, { planet: t(planetNameKey(planet.config)) }));
     return;
   }
   state.focused = planet;
+  const entry = townOf(planet);
+  ui.setCoins(entry.data, null, { park: entry.town.hasPark });
   await fly('planet', planetShot(planet), planetDistance(planet));
   planet.label.visible = false;
   ui.setView('planet', planet.config);
@@ -260,13 +271,15 @@ async function enterPlanet(planet) {
 /** 飛到店門口（{ kind: 'shop', index }）或爆倉公園（{ kind: 'park' }） */
 async function enterSpot(target) {
   if (state.view !== 'planet' && state.view !== 'shop') return;
-  const mapped = target.kind === 'shop' ? town.mappedAt(target.index) : null;
+  const entry = townOf(state.focused);
+  const mapped = target.kind === 'shop' ? entry.town.mappedAt(target.index) : null;
+  if (target.kind === 'park' && !entry.town.hasPark) return;
   state.focusKey = mapped ? mapped.coin.id : PARK_KEY;
-  ui.setCoins(townData, state.focusKey);
+  ui.setCoins(entry.data, state.focusKey, { park: entry.town.hasPark });
   ui.hideCards();
   await fly('shop', spotShot(target), SHOP_DISTANCE, SHOP_MAX_POLAR);
   if (mapped) {
-    ui.showCoin(mapped);
+    showShopCard(state.focused, mapped);
     ui.setView('shop', state.focused.config, mapped.coin);
   } else {
     ui.showPark();
@@ -274,11 +287,18 @@ async function enterSpot(target) {
   }
 }
 
+/** 主流星顯示幣種資訊卡，ETF 星顯示 ETF 資訊卡 */
+function showShopCard(planet, mapped) {
+  if (planet.config.id === ETF) ui.showEtf(mapped);
+  else ui.showCoin(mapped);
+}
+
 async function goBack() {
   if (state.view === 'shop') {
     state.focusKey = null;
     ui.hideCards();
-    ui.setCoins(townData, null);
+    const entry = townOf(state.focused);
+    ui.setCoins(entry.data, null, { park: entry.town.hasPark });
     const planet = state.focused;
     await fly('planet', planetShot(planet), planetDistance(planet));
     ui.setView('planet', planet.config);
@@ -316,7 +336,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 
 function handleTap() {
   if (state.view === 'planet' || state.view === 'shop') {
-    const target = town.pick(raycaster);
+    const target = townOf(state.focused).town.pick(raycaster);
     if (target) enterSpot(target);
     return;
   }
@@ -332,38 +352,62 @@ labelRenderer.domElement.addEventListener('click', (e) => {
 });
 
 // ---------- 資料 ----------
-let townData = [];
-
 let lastLiveAt = null;
 let refreshing = false;
 
-function applyData(coins) {
-  townData = mapTown(coins);
-  town.setData(townData);
-  ui.setCoins(townData, state.focusKey);
+/** 更新某顆星球的小鎮；正在看這顆星球時一併更新底部列與店面特寫 */
+function applyTownData(id, mapped) {
+  const entry = towns.get(id);
+  const previousIndex = state.focusKey ? entry.town.indexOf(state.focusKey) : -1;
+  entry.data = mapped;
+  entry.town.setData(mapped);
+  if (state.focused?.config.id !== id) return;
+  ui.setCoins(mapped, state.focusKey, { park: entry.town.hasPark });
   if (state.view !== 'shop' || state.focusKey === PARK_KEY) return;
-  // 店面特寫中：排名變動就跟著那個幣飛到新位置；幣跌出前十就回到星球
-  const index = town.indexOf(state.focusKey);
+  // 店面特寫中：排名變動才跟著那間店飛到新位置（使用者正在繞店旋轉時不打斷）；跌出前十就回到星球
+  const index = entry.town.indexOf(state.focusKey);
   if (index < 0) {
     goBack();
     return;
   }
-  ui.showCoin(town.mappedAt(index));
-  fly('shop', spotShot({ kind: 'shop', index }), SHOP_DISTANCE, SHOP_MAX_POLAR);
+  showShopCard(state.focused, entry.town.mappedAt(index));
+  if (index !== previousIndex) fly('shop', spotShot({ kind: 'shop', index }), SHOP_DISTANCE, SHOP_MAX_POLAR);
+}
+
+const applyData = (coins) => applyTownData(MAJOR, mapTown(coins));
+
+function applyEtf(dataset) {
+  ui.setEtfMeta(dataset);
+  applyTownData(ETF, mapEtfTown(pickTopEtfs(dataset.etfs)));
+}
+
+let refreshingEtf = false;
+
+async function refreshEtf() {
+  if (refreshingEtf || document.hidden || !towns.has(ETF) || state.view === 'flying') return;
+  refreshingEtf = true;
+  try {
+    const dataset = await loadEtfDataset();
+    // 讀不到新檔時保留目前的資料
+    if (dataset) applyEtf(dataset);
+  } finally {
+    refreshingEtf = false;
+  }
 }
 
 let refreshingLiqs = false;
 let hasRealLiqs = false;
 
 async function refreshLiquidations() {
-  if (refreshingLiqs || document.hidden || townData.length === 0) return;
+  const major = towns.get(MAJOR);
+  if (refreshingLiqs || document.hidden || !major || major.data.length === 0) return;
   refreshingLiqs = true;
   try {
-    const liqs = await loadLiquidations(townData.map((m) => m.coin));
+    const liqs = await loadLiquidations(major.data.map((m) => m.coin));
     // 已經有真實資料時，暫時失敗不要用範例資料蓋掉
     if (liqs.source !== 'okx' && hasRealLiqs) return;
     hasRealLiqs = hasRealLiqs || liqs.source === 'okx';
-    town.setLiquidations(liqs, t);
+    major.town.setLiquidations(liqs, t);
     ui.setParkData(liqs);
   } catch (err) {
     console.error('[crypto-planet] 爆倉資料更新失敗', err);
@@ -383,7 +427,7 @@ async function refresh() {
       lastLiveAt = result.updatedAt;
       ui.setStatus(result);
     } else {
-      ui.setStatus({ ...result, updatedAt: lastLiveAt ?? result.updatedAt }, { keptPrevious: townData.length > 0 });
+      ui.setStatus({ ...result, updatedAt: lastLiveAt ?? result.updatedAt }, { keptPrevious: towns.get(MAJOR).data.length > 0 });
     }
   } catch (err) {
     console.error('[crypto-planet] 更新失敗', err);
@@ -392,30 +436,46 @@ async function refresh() {
   }
 }
 
+/** 小鎮星球的地形：店面與公園位置整平成廣場 */
+const townField = (seed, radius, park) => createTerrainField({
+  seed, spots: townSpots({ park }), plazaAngle: PLAZA_RADIUS / radius,
+});
+
 async function start() {
-  const first = await loadTopCoins();
-  const totalCap = first.coins.reduce((sum, c) => sum + c.marketCap, 0);
-  majorRadius = planetRadius(totalCap);
-  const majorField = createTerrainField({
-    seed: MAJOR_TERRAIN_SEED, spots: townSpots(), plazaAngle: PLAZA_RADIUS / majorRadius,
-  });
-  solar = createSolarSystem(scene, { radii: { major: majorRadius }, townFields: { major: majorField }, t });
-  town = createTown(solar.planets.get('major').group, majorRadius);
+  // ETF 資料讀不到時 ETF 星維持上鎖，主流星照常
+  const [first, etfData] = await Promise.all([loadTopCoins(), loadEtfDataset()]);
+  const majorRadius = planetRadius(first.coins.reduce((sum, c) => sum + c.marketCap, 0));
+  const radii = { [MAJOR]: majorRadius };
+  const townFields = { [MAJOR]: townField(MAJOR_TERRAIN_SEED, majorRadius, true) };
+  const available = new Set([MAJOR]);
+  if (etfData) {
+    radii[ETF] = planetRadius(pickTopEtfs(etfData.etfs).reduce((sum, e) => sum + e.netAssets, 0));
+    townFields[ETF] = townField(ETF_TERRAIN_SEED, radii[ETF], false);
+    available.add(ETF);
+  }
+  solar = createSolarSystem(scene, { radii, townFields, available, t });
+  for (const id of available) {
+    const town = createTown(solar.planets.get(id).group, radii[id], { park: id === MAJOR });
+    towns.set(id, { town, data: [], radius: radii[id] });
+  }
   applyData(first.coins);
+  if (etfData) applyEtf(etfData);
   if (first.source === 'live') lastLiveAt = first.updatedAt;
   ui.setStatus(first);
-  document.fonts?.ready.then(() => town.redrawSigns());
+  document.fonts?.ready.then(() => towns.forEach(({ town }) => town.redrawSigns()));
   ui.setView('solar');
   ui.doneLoading();
   setInterval(refresh, REFRESH_MS);
   applyLook(nightK);
   refreshLiquidations();
   setInterval(refreshLiquidations, LIQ_REFRESH_MS);
+  setInterval(refreshEtf, ETF_REFRESH_MS);
   // 背景分頁不更新；切回來時立刻補一次，不必等下一輪
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     refresh();
     refreshLiquidations();
+    refreshEtf();
   });
   renderer.setAnimationLoop(frame);
 }
@@ -441,14 +501,15 @@ function frame() {
   if (rig.flying) rig.update(realDt);
   else controls.update();
 
-  const major = solar.planets.get('major');
-  const crowdRange = majorRadius * CROWD_VISIBLE_FACTOR * fitFactor();
-  const nearTown = camera.position.distanceTo(major.group.position) < crowdRange;
-  town.setCrowdVisible(nearTown);
-  // 看不到人潮時暫停模擬，省手機電量
-  if (nearTown) {
-    town.step(simDt);
-    town.render();
+  for (const [id, { town, radius }] of towns) {
+    const crowdRange = radius * CROWD_VISIBLE_FACTOR * fitFactor();
+    const nearTown = camera.position.distanceTo(solar.planets.get(id).group.position) < crowdRange;
+    town.setCrowdVisible(nearTown);
+    // 看不到人潮時暫停模擬，省手機電量
+    if (nearTown) {
+      town.step(simDt);
+      town.render();
+    }
   }
 
   composer.render();

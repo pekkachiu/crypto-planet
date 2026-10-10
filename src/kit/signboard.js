@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { formatPrice, formatPct } from '../ui/format.js';
 
 // 淺色招牌上的漲跌字色要深一點才看得清楚
 const TREND_TEXT = Object.freeze({ up: '#0f9d63', down: '#d63340', flat: '#7d8790' });
@@ -12,7 +11,7 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.roundRect(x, y, w, h, r);
 }
 
-/** 永遠面向鏡頭的電子招牌：代號、價格、24h 漲跌 */
+/** 永遠面向鏡頭的電子招牌：排名、代號，下排左邊 primary（價格）、右邊 secondary（漲跌或資金流） */
 export function createSignboard() {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -27,7 +26,7 @@ export function createSignboard() {
   sprite.scale.set(2.3, 2.3 * (H / W), 1);
   sprite.position.set(0, 2.75, -0.1);
 
-  const draw = ({ symbol, rank, price, change24h }, trend, accent) => {
+  const draw = ({ symbol, rank, primary, secondary }, trend, accent) => {
     ctx.clearRect(0, 0, W, H);
     roundRect(ctx, 6, 6, W - 12, H - 12, 28);
     ctx.fillStyle = '#fffaf2';
@@ -45,11 +44,11 @@ export function createSignboard() {
     ctx.fillText(symbol, 110, 82);
 
     ctx.font = `600 54px ${FONT}`;
-    ctx.fillText(formatPrice(price), 34, 168);
+    ctx.fillText(primary, 34, 168);
     ctx.textAlign = 'right';
     ctx.fillStyle = TREND_TEXT[trend];
     ctx.font = `700 46px ${FONT}`;
-    ctx.fillText(formatPct(change24h), W - 34, 168);
+    ctx.fillText(secondary, W - 34, 168);
     ctx.textAlign = 'left';
     texture.needsUpdate = true;
   };

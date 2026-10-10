@@ -1,6 +1,6 @@
 # CLAUDE.md — 加密星球小鎮（crypto-planet）
 
-靜態網站：把加密貨幣市場畫成低多邊形太陽系。每個分類一顆星球，每個幣種是星球上的一間店。沒有後端，瀏覽器直接呼叫公開 API，部署在 GitHub Pages。使用者面向的說明在 README.md，這份只記錄開發時需要知道的事。
+靜態網站：把加密貨幣市場畫成低多邊形太陽系。每個分類一顆星球，每個幣種（或 ETF）是星球上的一間店。沒有後端，部署在 GitHub Pages。主流星由瀏覽器直接呼叫公開 API；ETF 星的資料要 API Key，由 GitHub Actions 抓好成 `etf.json` 一起部署。使用者面向的說明在 README.md，這份只記錄開發時需要知道的事。
 
 ## 指令
 
@@ -10,6 +10,7 @@ npm run coverage    # 單元測試＋覆蓋率（門檻 80%，只統計純邏輯
 npm run e2e         # Playwright（桌機＋Pixel 7），會自動 build 並啟動 vite preview
 npm run build       # 輸出到 dist/（base: './'，讓 GitHub Pages 子路徑能載入）
 node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.json
+node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 public/data/etf.json（本機測 ETF 星用）
 ```
 
 - 本機預覽請用 `npx vite preview --port 4173`。有 hook 會擋下指令裡出現「npm run dev」字樣的呼叫，包括寫進檔案內容的 heredoc。
@@ -20,7 +21,7 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
 
 | 目錄 | 內容 | 測試 |
 |---|---|---|
-| `src/data/` | API 抓取、資料正規化、數值→畫面參數、星球設定、建築分級、OKX 爆倉 | 單元測試 |
+| `src/data/` | API 抓取、資料正規化、數值→畫面參數、星球設定、建築分級、OKX 爆倉、ETF（`etf.js` 網頁與腳本共用，`etf-fetch.js` 只在 Actions 執行） | 單元測試 |
 | `src/sim/` | 人潮模擬、球面幾何、地形場、雜訊、公園配置、鏡頭弧線路徑、亂數 | 單元測試 |
 | `src/i18n/` | 中英翻譯與語言偵測 | 單元測試 |
 | `src/kit/` | Three.js 素材：建築、招牌、方塊小人、地形、公園、路燈、材質 | E2E／截圖 |
@@ -29,7 +30,8 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
 | `src/main.js` | 組裝：渲染器、視角狀態機、資料更新、日夜切換 | E2E |
 
 - **視角狀態**：`solar`（太陽系）→ `planet`（星球全景）→ `shop`（店門口或爆倉公園特寫），飛行中為 `flying`。`state.focusKey` 是幣種 id 或 `'park'`。`body[data-view]` 與 `body[data-theme]` 供 E2E 判斷狀態。
-- **小鎮佈局**：`townSpots()` 用費氏螺旋把 `TOP_N + 1` 個點撒在整顆星球上。第 0 點（北極）是爆倉公園，其後依市值排名往南排。地形的平坦廣場也用同一組點。
+- **小鎮佈局**：`townSpots({ park })` 用費氏螺旋把點撒在整顆星球上。主流星有公園：第 0 點（北極）是爆倉公園，其後依市值排名往南排；ETF 星沒有公園，全部是店面。地形的平坦廣場也用同一組點。
+- **多顆小鎮星球**：`main.js` 的 `towns` Map（`major`、`etf`）。`townOf(state.focused)` 取得目前所在星球的小鎮；店面清單的共通欄位是 `mapped.coin.id`、`mapped.coin.symbol`、`mapped.sign`（招牌與底部列文字）。
 - **店面切面座標**：店在原點、門朝 +z（南），從正面看右邊（+x）排買方、左邊（-x）排賣方。人潮、欄杆、路燈都用 `groundHeight()` 貼著彎曲的球面。
 
 ## 產品決定（不要再改或重問）
@@ -38,6 +40,7 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
 - **前十大的定義**：排除穩定幣與包裝幣後，在 Binance 有 USDT 現貨交易對的市值前十名。Binance 沒上架的幣拿不到主動買賣量，所以不列入。
 - **建築用「絕對」市值分級**（`src/data/tiers.js`），以後的迷因星小幣自然就是小攤。
 - **爆倉公園只用 OKX 資料，不是全網。** 使用者看過 Coinglass，但它的內部 API 是加密的；拆解加密等於繞過網站保護，所以不採用。付費或要 Key 的方案（Coinglass、Coinalyze）暫不使用。介面上必須保留「僅 OKX、非全網」的標示。
+- **ETF 星用 SoSoValue 官方 API**（免費 Key）。舊的免 Key 端點 `api.sosovalue.xyz` 已下線（404）；Farside 有 Cloudflare 防爬蟲保護、DefiLlama 沒有公開的 ETF API，兩者都不採用。範圍是美國現貨 BTC＋ETH ETF，取資產規模前十。綠色隊伍＝淨流入、紅色隊伍＝淨流出。
 - 即時爆倉隕石做過又拿掉了：主流幣在平靜行情下的即時爆倉太稀疏，畫面上幾乎看不到。
 - 日夜模式預設依當地時間（06–18 為白天），使用者切換後記在 localStorage。
 - 支援手機。直式螢幕用 `fitFactor()` 把鏡頭拉遠。
@@ -52,6 +55,9 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
   - `sz` 是張數，金額＝`sz × ctVal × bkPx`，`ctVal` 來自 `/public/instruments`。
   - 單向持倉模式沒有 `posSide`，改看 `side`：`sell` 是多單爆倉，`buy` 是空單爆倉。
   - 個別幣種失敗時加總成功的幣並標記 `partial`；之後的更新失敗時保留上一次的真實資料。
+- **SoSoValue**（`openapi.sosovalue.com/openapi/v1`，header `x-soso-api-key`）：每分鐘 20 次、每月 10 萬次，`etf-fetch.js` 每個請求間隔 3.2 秒並處理 429。資金流 T+1 結算，要拿最新已結算數字用 `/etfs/{ticker}/market-snapshot`；`summary-history` 的第一筆可能是 null，要跳過。
+- **API Key 存在 `github-pages` 環境（environment）的 secret `SOSOVALUE_API_KEY`**，不是 repo secret。這個環境只允許 main 分支，只有 `deploy.yml` 的 `etf-data` job 拿得到；該 job 不跑 `npm ci`，`fetch-etf.mjs` 也不載入任何 npm 套件。請求設 `redirect: 'error'`，避免 Key 被導向轉送。絕對不要把 Key 放進 `src/`、前端程式碼或任何 log。本機用 `.env.local`（已 gitignore）。
+- 排程（schedule）的 workflow 在 repo 60 天沒有活動後會被 GitHub 自動停用，ETF 資料就不會再更新；網頁會顯示資料日期，看到日期太舊時到 Actions 重新啟用。
 - 用 Python `urllib` 打 OKX 會被擋（403，缺 User-Agent），測試 API 請改用 Node 的 `fetch` 或 curl。
 
 ## 慣例
@@ -72,5 +78,4 @@ node scripts/make-sample.mjs   # 用即時 API 重新產生 src/data/sample*.jso
 ## 待辦
 
 - 迷因、AI、公鏈星球：CoinGecko 有 `/coins/categories` 可以用。
-- ETF 星球：Yahoo Finance 有價格和成交量但不允許跨網域請求，也沒有資金流資料。資料來源（SoSoValue／Farside／不做資金流）還沒決定。
-- 尚未推上 GitHub。推上去後，要在 Settings → Pages 把來源設成「GitHub Actions」。
+- ETF 星目前只有美國現貨 BTC／ETH；SoSoValue 也有 SOL、XRP 等與香港 ETF，要加的話改 `ETF_ASSETS`。

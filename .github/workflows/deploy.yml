@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # ETF 資金流是 T+1 結算，每天抓兩次（台灣時間 09:30、21:30），重新部署
+  schedule:
+    - cron: '30 1,13 * * *'
   workflow_dispatch:
 
 permissions:
@@ -13,7 +16,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 只有這個 job 拿得到 SoSoValue API Key：
+  # - Key 存在 github-pages 環境的 secret，這個環境只允許 main 分支，其他分支改了 workflow 也拿不到
+  # - 不執行 npm ci，fetch-etf.mjs 也不載入任何 npm 套件，Key 不會經過第三方程式碼
+  etf-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Fetch ETF data from SoSoValue
+        id: etf
+        continue-on-error: true
+        env:
+          SOSOVALUE_API_KEY: ${{ secrets.SOSOVALUE_API_KEY }}
+        run: node scripts/fetch-etf.mjs public/data/etf.json
+      # 抓取失敗時沿用網站上目前的 etf.json（格式檢查通過才用；網頁會顯示資料日期），都沒有就讓 ETF 星暫停開放
+      - name: Keep previous ETF data
+        if: steps.etf.outcome != 'success'
+        env:
+          BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          mkdir -p public/data
+          if curl -fsS --max-time 20 "$BASE_URL/data/etf.json" -o public/data/etf.json \
+            && node scripts/fetch-etf.mjs --validate public/data/etf.json; then
+            echo "::warning::ETF 資料抓取失敗，沿用上一次部署的資料"
+          else
+            rm -f public/data/etf.json
+            echo "::warning::沒有可用的 ETF 資料，ETF 星會暫停開放"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: etf-data
+          path: public/data/
+          if-no-files-found: ignore
+          retention-days: 1
+
   build:
+    needs: etf-data
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +68,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Download ETF data
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: etf-data
+          path: public/data
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

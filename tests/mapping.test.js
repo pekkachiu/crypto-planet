@@ -40,6 +40,10 @@ describe('mapTown', () => {
     coin('b', { volume24h: 1e6, takerBuy: 1e5, takerSell: 9e5, trades: 1e3, marketCap: 1e9, change24h: -3 }),
   ];
 
+  it('招牌顯示排名、代號、價格與 24h 漲跌', () => {
+    const [a] = mapTown([{ ...coins[0], rank: 1, symbol: 'BTC', price: 64000 }]);
+    expect(a.sign).toEqual({ rank: 1, symbol: 'BTC', primary: '$64,000', secondary: '+2.00%' });
+  });
   it('成交量最大的店人最多、最小的人最少', () => {
     const [a, b] = mapTown(coins);
     expect(a.pedestrians).toBe(RANGES.pedestrians[1]);

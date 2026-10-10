@@ -63,10 +63,16 @@ body {
   color: var(--accent); background: rgba(76, 194, 255, 0.12); border: 1px solid rgba(76, 194, 255, 0.3);
 }
 
-#coin-card, #park-card {
+#coin-card, #park-card, #etf-card {
   position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + 84px);
   width: 300px; padding: 18px 18px 14px;
 }
+.asset-badge {
+  padding: 2px 8px; border-radius: 999px; font: 600 11px var(--mono);
+  color: #f2c14e; background: rgba(242, 193, 78, 0.12); border: 1px solid rgba(242, 193, 78, 0.3);
+}
+.etf-name { margin: 2px 0 0; font-size: 13px; }
+#etf-inflow { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .close {
   position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 10px;
   background: transparent; color: var(--muted); font-size: 22px; cursor: pointer;
@@ -155,7 +161,7 @@ body {
   #status { font-size: 10px; letter-spacing: 0.02em; }
   #top-actions .chip { padding: 10px 12px; font-size: 13px; }
   #top-actions { flex-direction: column; align-items: flex-end; }
-  #coin-card, #park-card {
+  #coin-card, #park-card, #etf-card {
     left: calc(var(--sl) + var(--gutter)); right: calc(var(--sr) + var(--gutter)); top: auto; width: auto;
     bottom: calc(var(--sb) + 136px); padding: 14px 14px 10px;
   }
