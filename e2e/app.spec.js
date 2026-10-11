@@ -19,6 +19,9 @@ const ETF_FIXTURE = {
 };
 
 async function offline(page, { etf = ETF_FIXTURE } = {}) {
+  // 測試不送訪客統計
+  await page.route('https://gc.zgo.at/**', (route) => route.abort());
+  await page.route('https://*.goatcounter.com/**', (route) => route.abort());
   await page.route('**/data/etf.json', (route) => (etf ? route.fulfill({ json: etf }) : route.fulfill({ status: 404, body: '' })));
   await page.route('https://api.coingecko.com/**', (route) => route.fulfill({ status: 503, body: '' }));
   await page.route('https://data-api.binance.vision/**', (route) => route.fulfill({ status: 503, body: '' }));
@@ -241,4 +244,13 @@ test('ETF 資料被竄改成惡意字串時不會執行，只會被丟掉', asyn
   await expect(page.locator('#etf-tickers')).toHaveText('IBIT');
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   await expect(page.locator('#etf-card img')).toHaveCount(0);
+});
+
+test('訪客統計用鎖定版本的 GoatCounter，並帶完整性雜湊', async ({ page }) => {
+  await openSolar(page);
+  const script = page.locator('script[data-goatcounter]');
+  await expect(script).toHaveAttribute('data-goatcounter', 'https://crypto-planet.goatcounter.com/count');
+  await expect(script).toHaveAttribute('src', 'https://gc.zgo.at/count.v5.js');
+  await expect(script).toHaveAttribute('integrity', /^sha384-/);
+  await expect(script).toHaveAttribute('crossorigin', 'anonymous');
 });
