@@ -3,13 +3,13 @@ import { PLANETS, orbitPosition, findPlanet, planetNameKey, planetSubtitleKey } 
 import { MESSAGES } from '../src/i18n/index.js';
 
 describe('PLANETS', () => {
-  it('包含主流、迷因、AI、公鏈、ETF 五顆星球，且 id 不重複', () => {
+  it('包含主流、迷因、AI、公鏈、ETF、恐懼貪婪六顆星球，且 id 不重複', () => {
     const ids = PLANETS.map((p) => p.id);
-    expect(ids).toEqual(expect.arrayContaining(['major', 'meme', 'ai', 'layer1', 'etf']));
+    expect(ids).toEqual(expect.arrayContaining(['major', 'meme', 'ai', 'layer1', 'etf', 'mood']));
     expect(new Set(ids).size).toBe(ids.length);
   });
-  it('主流星與 ETF 星開放（ETF 星還要等資料載入成功才解鎖）', () => {
-    expect(PLANETS.filter((p) => p.enabled).map((p) => p.id)).toEqual(['major', 'etf']);
+  it('主流星、ETF 星、恐懼貪婪星開放（後兩顆要等資料載入成功才解鎖）', () => {
+    expect(PLANETS.filter((p) => p.enabled).map((p) => p.id)).toEqual(['major', 'etf', 'mood']);
   });
   it('軌道半徑由內而外遞增，不會撞在一起', () => {
     const orbits = PLANETS.map((p) => p.orbit);
