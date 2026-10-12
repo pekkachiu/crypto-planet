@@ -9,6 +9,8 @@ export const HISTORY_DAYS = 31;
 export const FNG_URL = `https://api.alternative.me/fng/?limit=${HISTORY_DAYS}`;
 export const FNG_SOURCE = 'alternative.me';
 const DAY_SECONDS = 86400;
+/** 時間戳記上限（約西元 2096 年），太大的值 toISOString() 會丟錯 */
+const MAX_SECONDS = 4e9;
 const NEUTRAL = 50;
 /** 雨從 45 分以下開始下、太陽從 55 分以上開始亮，中間是多雲 */
 const CALM = { rainBelow: 45, sunAbove: 55 };
@@ -22,14 +24,15 @@ export function moodLevel(value) {
 
 const toDate = (seconds) => new Date(seconds * 1000).toISOString().slice(0, 10);
 
-/** 單筆資料：分數必須是 0～100 的整數字串或數字、時間戳記必須是正整數秒 */
+/** 單筆資料：分數必須是 0～100 的整數字串或數字、時間戳記必須是合理範圍內的正整數秒 */
 function parseRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const value = Number(raw.value);
   const seconds = Number(raw.timestamp);
   if (!/^\d{1,3}$/.test(String(raw.value).trim()) || value > 100) return null;
-  if (!Number.isInteger(seconds) || seconds <= 0) return null;
-  return { value, seconds };
+  if (!Number.isInteger(seconds) || seconds <= 0 || seconds >= MAX_SECONDS) return null;
+  const countdown = Number(raw.time_until_update);
+  return { value, seconds, countdown: Number.isInteger(countdown) && countdown >= 0 ? countdown : null };
 }
 
 export function parseFearGreed(body) {
@@ -44,12 +47,12 @@ export function parseFearGreed(body) {
     history.push({ value, date, level: moodLevel(value) });
   }
   if (history.length === 0) return null;
-  const countdown = Number(body.data[0]?.time_until_update);
   return {
     source: FNG_SOURCE,
     today: history[0],
     history: history.slice(0, HISTORY_DAYS),
-    nextUpdateSec: Number.isInteger(countdown) && countdown >= 0 ? countdown : null,
+    // 倒數只採用實際被當成今天的那一筆（rows[0]），不讀未驗證的原始資料
+    nextUpdateSec: rows[0].countdown,
   };
 }
 

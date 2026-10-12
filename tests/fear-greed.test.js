@@ -43,6 +43,15 @@ describe('parseFearGreed', () => {
     const many = Array.from({ length: 60 }, (_, i) => row(50, i));
     expect(parseFearGreed(payload(many)).history).toHaveLength(HISTORY_DAYS);
   });
+  it('倒數秒數只採用實際被當成今天的那一筆', () => {
+    const result = parseFearGreed(payload([row(999, 0, { time_until_update: '5' }), row(61, 1)]));
+    expect(result.today.value).toBe(61);
+    expect(result.nextUpdateSec).toBeNull();
+  });
+  it('時間戳記大到無法換成日期時只丟掉那一筆', () => {
+    const result = parseFearGreed(payload([row(69), row(50, 1, { timestamp: '100000000000000000000' })]));
+    expect(result.history.map((h) => h.value)).toEqual([69]);
+  });
   it('倒數秒數無效時為 null', () => {
     expect(parseFearGreed(payload([row(69, 0, { time_until_update: 'soon' })])).nextUpdateSec).toBeNull();
   });
