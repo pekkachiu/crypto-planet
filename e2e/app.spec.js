@@ -332,6 +332,19 @@ test('恐懼貪婪指數被竄改成惡意字串時不會執行，只會被丟�
   await expect(page.locator('#mood-card img')).toHaveCount(0);
 });
 
+test('在介面面板上用觸控板或手指捏合縮放，不會把整個網頁放大裁切', async ({ page, browserName }, testInfo) => {
+  test.skip(browserName !== 'chromium', '捏合手勢要用 Chromium 的 CDP 模擬');
+  await openSolar(page);
+  const cdp = await page.context().newCDPSession(page);
+  const source = testInfo.project.name === 'mobile' ? 'touch' : 'mouse';
+  const box = await page.locator('#brand').boundingBox();
+  await cdp.send('Input.synthesizePinchGesture', {
+    x: box.x + box.width / 2, y: box.y + box.height / 2, scaleFactor: 1.6, gestureSourceType: source,
+  });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => visualViewport.scale)).toBe(1);
+});
+
 test('訪客統計用鎖定版本的 GoatCounter，並帶完整性雜湊', async ({ page }) => {
   await openSolar(page);
   const script = page.locator('script[data-goatcounter]');

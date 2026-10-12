@@ -115,6 +115,13 @@ addEventListener('resize', () => {
   refreshDistance();
 });
 
+// ---------- 擋住整頁縮放 ----------
+// 觸控板雙指縮放會送出帶 ctrlKey 的 wheel 事件；在 3D 畫面上 OrbitControls 會吃掉，但在介面面板上
+// 瀏覽器會放大整個網頁，介面被裁到視窗外。這是全螢幕 3D 應用，縮放一律交給鏡頭。
+addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+// Safari 的觸控板捏合走 gesture 事件
+for (const type of ['gesturestart', 'gesturechange']) addEventListener(type, (e) => e.preventDefault());
+
 // ---------- 狀態 ----------
 const rig = createCameraRig(camera, controls);
 /** view：solar（太陽系）→ planet（星球全景）→ shop（店門口特寫）；飛行中為 flying */
