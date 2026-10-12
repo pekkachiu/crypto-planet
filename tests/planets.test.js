@@ -11,10 +11,13 @@ describe('PLANETS', () => {
   it('主流星、ETF 星、恐懼貪婪星開放（後兩顆要等資料載入成功才解鎖）', () => {
     expect(PLANETS.filter((p) => p.enabled).map((p) => p.id)).toEqual(['major', 'etf', 'mood']);
   });
-  it('軌道半徑由內而外遞增，不會撞在一起', () => {
-    const orbits = PLANETS.map((p) => p.orbit);
-    expect(orbits).toEqual(orbits.toSorted((a, b) => a - b));
+  it('軌道半徑不重複，相鄰軌道至少相隔 25，不會撞在一起', () => {
+    const orbits = PLANETS.map((p) => p.orbit).toSorted((a, b) => a - b);
     expect(new Set(orbits).size).toBe(orbits.length);
+    orbits.slice(1).forEach((o, i) => expect(o - orbits[i]).toBeGreaterThanOrEqual(25));
+  });
+  it('最外圈軌道不超過 ETF 星，預設的太陽系視角放得下所有星球', () => {
+    expect(Math.max(...PLANETS.map((p) => p.orbit))).toBe(findPlanet('etf').orbit);
   });
 });
 

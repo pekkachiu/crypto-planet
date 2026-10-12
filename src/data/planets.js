@@ -8,7 +8,8 @@ export const PLANETS = Object.freeze([
   { id: 'ai', color: '#8b6cff', enabled: false, orbit: 128, speed: 0.02, phase: 4.2, radius: 8 },
   { id: 'layer1', color: '#3dd6b0', enabled: false, orbit: 158, speed: 0.016, phase: 5.4, radius: 10 },
   { id: 'etf', color: '#f2c14e', enabled: true, orbit: 192, speed: 0.012, phase: 1.3, radius: 11 },
-  { id: 'mood', color: '#ff8a5c', enabled: true, orbit: 226, speed: 0.01, phase: 3.6, radius: 11 },
+  // 恐懼貪婪星在最內圈：外圈已經接近預設視角的邊緣，再往外會跑出畫面
+  { id: 'mood', color: '#ff8a5c', enabled: true, orbit: 34, speed: 0.05, phase: 3.6, radius: 10 },
 ].map(Object.freeze));
 
 export function orbitPosition(planet, t) {
