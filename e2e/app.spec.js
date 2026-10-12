@@ -18,10 +18,25 @@ const ETF_FIXTURE = {
   ],
 };
 
-async function offline(page, { etf = ETF_FIXTURE } = {}) {
+/** 恐懼貪婪指數的測試資料：今天 15（極度恐懼）、昨天 25、一週前 40、一個月前 72，其他天 30 */
+const FNG_T0 = Date.UTC(2026, 9, 12) / 1000;
+const FNG_SPECIAL = { 0: 15, 1: 25, 7: 40, 30: 72 };
+const FNG_FIXTURE = {
+  name: 'Fear and Greed Index',
+  data: Array.from({ length: 31 }, (_, i) => ({
+    value: String(FNG_SPECIAL[i] ?? 30),
+    value_classification: 'Extreme Fear',
+    timestamp: String(FNG_T0 - i * 86400),
+    ...(i === 0 ? { time_until_update: '36000' } : {}),
+  })),
+  metadata: { error: null },
+};
+
+async function offline(page, { etf = ETF_FIXTURE, fng = FNG_FIXTURE } = {}) {
   // 測試不送訪客統計
   await page.route('https://gc.zgo.at/**', (route) => route.abort());
   await page.route('https://*.goatcounter.com/**', (route) => route.abort());
+  await page.route('https://api.alternative.me/**', (route) => (fng ? route.fulfill({ json: fng }) : route.fulfill({ status: 503, body: '' })));
   await page.route('**/data/etf.json', (route) => (etf ? route.fulfill({ json: etf }) : route.fulfill({ status: 404, body: '' })));
   await page.route('https://api.coingecko.com/**', (route) => route.fulfill({ status: 503, body: '' }));
   await page.route('https://data-api.binance.vision/**', (route) => route.fulfill({ status: 503, body: '' }));
@@ -45,10 +60,10 @@ test.beforeEach(async ({ page }) => {
   await offline(page);
 });
 
-test('API 失敗時顯示範例資料，太陽系五顆星球都有標籤', async ({ page }) => {
+test('API 失敗時顯示範例資料，太陽系六顆星球都有標籤', async ({ page }) => {
   await openSolar(page);
   await expect(page.locator('#status')).toContainText('範例資料');
-  for (const id of ['major', 'meme', 'ai', 'layer1', 'etf']) {
+  for (const id of ['major', 'meme', 'ai', 'layer1', 'etf', 'mood']) {
     await expect(page.locator(`[data-planet="${id}"]`)).toBeAttached();
   }
 });
@@ -244,6 +259,65 @@ test('ETF 資料被竄改成惡意字串時不會執行，只會被丟掉', asyn
   await expect(page.locator('#etf-tickers')).toHaveText('IBIT');
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   await expect(page.locator('#etf-card img')).toHaveCount(0);
+});
+
+test('恐懼貪婪星：儀表與資訊卡顯示今天的分數、過去分數與 30 天走勢，中英切換', async ({ page }) => {
+  await openSolar(page);
+  await page.locator('[data-planet="mood"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await expect(page.locator('#status')).toHaveText('恐懼貪婪指數・alternative.me・2026-10-12');
+  await expect(page.locator('#view-title')).toContainText('點儀表看詳情');
+  await expect(page.locator('#legend-sell')).toHaveText('紅＝恐懼・下雨');
+  await expect(page.locator('#coin-strip [data-park]')).toHaveCount(0);
+  await expect(page.locator('#coin-strip [data-coin]')).toHaveCount(1);
+  await expect(page.locator('#coin-strip [data-coin="fng"] small')).toHaveText('-10');
+
+  await page.locator('#coin-strip [data-coin="fng"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'shop', { timeout: 10_000 });
+  await expect(page.locator('#mood-card')).toBeVisible();
+  await expect(page.locator('#coin-card')).toBeHidden();
+  await expect(page.locator('#mood-value')).toHaveText('15');
+  await expect(page.locator('#mood-value')).toHaveClass('lv-extremeFear');
+  await expect(page.locator('#mood-level')).toHaveText('極度恐懼');
+  await expect(page.locator('#mood-yesterday')).toHaveText('25 極度恐懼');
+  await expect(page.locator('#mood-week')).toHaveText('40 恐懼');
+  await expect(page.locator('#mood-month')).toHaveText('72 貪婪');
+  await expect(page.locator('#mood-chart span')).toHaveCount(31);
+  await expect(page.locator('#mood-source')).toHaveText('alternative.me・資料日期 2026-10-12・每天更新一次・約 10 小時後更新');
+
+  await page.locator('#lang').click();
+  await expect(page.locator('#mood-level')).toHaveText('Extreme Fear');
+  await expect(page.locator('#mood-month')).toHaveText('72 Greed');
+  await expect(page.locator('#view-title')).toContainText('gauge close-up');
+
+  await page.locator('#mood-close').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await expect(page.locator('#mood-card')).toBeHidden();
+});
+
+test('恐懼貪婪指數抓不到時那顆星維持上鎖，其他星球照常', async ({ page }) => {
+  await offline(page, { fng: null });
+  await openSolar(page);
+  await page.locator('[data-planet="mood"]').dispatchEvent('click');
+  await expect(page.locator('#toast')).toHaveText('恐懼貪婪指數暫時無法取得');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'solar');
+  await page.locator('[data-planet="etf"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+});
+
+test('恐懼貪婪指數被竄改成惡意字串時不會執行，只會被丟掉', async ({ page }) => {
+  const [today, ...rest] = FNG_FIXTURE.data;
+  const evil = { ...FNG_FIXTURE, data: [{ ...today, value: '<img src=x onerror="window.__pwned=1">' }, ...rest] };
+  await offline(page, { fng: evil });
+  await openSolar(page);
+  await page.locator('[data-planet="mood"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  // 今天那筆被丟掉，改用最新的有效資料（昨天的 25）
+  await expect(page.locator('#status')).toHaveText('恐懼貪婪指數・alternative.me・2026-10-11');
+  await page.locator('#coin-strip [data-coin="fng"]').click();
+  await expect(page.locator('#mood-value')).toHaveText('25', { timeout: 10_000 });
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  await expect(page.locator('#mood-card img')).toHaveCount(0);
 });
 
 test('訪客統計用鎖定版本的 GoatCounter，並帶完整性雜湊', async ({ page }) => {
