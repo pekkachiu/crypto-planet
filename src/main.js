@@ -11,10 +11,12 @@ import { REFRESH_MS } from './data/config.js';
 import { createSolarSystem } from './scenes/solar-system.js';
 import { createTown, townSpots, PLAZA_RADIUS } from './scenes/planet-town.js';
 import { createTerrainField } from './sim/terrain-field.js';
-import { planetNameKey } from './data/planets.js';
+import { planetNameKey, findPlanet } from './data/planets.js';
 import { detectLang, createTranslator, STORAGE_KEY } from './i18n/index.js';
 import { loadLiquidations } from './data/okx-liquidations.js';
 import { loadEtfDataset, rankAssets, mapEtfTown, ETF_ASSETS } from './data/etf.js';
+import { loadFearGreed, mapMood } from './data/fear-greed.js';
+import { createMoodPlanet, MOOD_SPOTS } from './scenes/mood-planet.js';
 import { detectTheme, THEME_STORAGE_KEY } from './ui/theme.js';
 import { applyNight } from './kit/materials.js';
 import { createCameraRig, HOME } from './scenes/camera-rig.js';
@@ -34,6 +36,9 @@ const PLANET_DISTANCE = { min: 1.6, max: 6 };
 const SHOP_VIEW = { up: 4.2, back: 7.4, lookRatio: 0.24, minLook: 0.8, lookAhead: 1.4, refHeight: 4.5 };
 const MAJOR_TERRAIN_SEED = 118;
 const ETF_TERRAIN_SEED = 307;
+const MOOD_TERRAIN_SEED = 512;
+/** 恐懼貪婪指數每天只更新一次，每小時檢查一次就夠 */
+const MOOD_REFRESH_MS = 60 * 60_000;
 /** etf.json 由部署流程每天更新兩次，網頁每 30 分鐘重新讀一次就夠 */
 const ETF_REFRESH_MS = 30 * 60_000;
 /** OKX 爆倉歷史每 5 分鐘更新一次（每次要翻好幾頁，不必太頻繁） */
@@ -104,6 +109,7 @@ addEventListener('resize', () => {
   composer.setSize(innerWidth, innerHeight);
   bloom.resolution.set(innerWidth * QUALITY.bloomScale, innerHeight * QUALITY.bloomScale);
   labelRenderer.setSize(innerWidth, innerHeight);
+  towns.get(MOOD)?.town.setAspect(camera.aspect);
   refreshDistance();
 });
 
@@ -115,6 +121,7 @@ const state = { view: 'solar', speed: 1, simTime: 0, focusKey: null, focused: nu
 const PARK_KEY = 'park';
 const MAJOR = 'major';
 const ETF = 'etf';
+const MOOD = 'mood';
 let solar = null;
 /** 有小鎮的星球：id → { town, data（換算後的店面清單）, radius } */
 const towns = new Map();
@@ -139,6 +146,7 @@ function toggleLang() {
   ui.setLanguage(t, lang);
   solar?.setLanguage(t);
   towns.get(MAJOR)?.town.redrawPark(t);
+  towns.get(MOOD)?.town.setLanguage(t);
 }
 
 // ---------- 白天／夜晚 ----------
@@ -256,7 +264,8 @@ function spotShot(target) {
 async function enterPlanet(planet) {
   if (state.view !== 'solar') return;
   if (!planet.config.enabled) {
-    const key = planet.config.id === ETF ? 'toast.etfUnavailable' : 'toast.locked';
+    const UNAVAILABLE = { [ETF]: 'toast.etfUnavailable', [MOOD]: 'toast.moodUnavailable' };
+    const key = UNAVAILABLE[planet.config.id] ?? 'toast.locked';
     ui.toast(t(key, { planet: t(planetNameKey(planet.config)) }));
     return;
   }
@@ -287,9 +296,10 @@ async function enterSpot(target) {
   }
 }
 
-/** 主流星顯示幣種資訊卡，ETF 星顯示 ETF 資訊卡 */
+/** 主流星顯示幣種資訊卡，ETF 星顯示 ETF 資訊卡，恐懼貪婪星顯示指數資訊卡 */
 function showShopCard(planet, mapped) {
   if (planet.config.id === ETF) ui.showEtf(mapped);
+  else if (planet.config.id === MOOD) ui.showMood(mapped);
   else ui.showCoin(mapped);
 }
 
@@ -395,6 +405,25 @@ async function refreshEtf() {
   }
 }
 
+function applyMood(data) {
+  ui.setMoodMeta(data);
+  applyTownData(MOOD, [mapMood(data)]);
+}
+
+let refreshingMood = false;
+
+async function refreshMood() {
+  if (refreshingMood || document.hidden || !towns.has(MOOD) || state.view === 'flying') return;
+  refreshingMood = true;
+  try {
+    const data = await loadFearGreed();
+    // 抓不到時保留目前的資料
+    if (data) applyMood(data);
+  } finally {
+    refreshingMood = false;
+  }
+}
+
 let refreshingLiqs = false;
 let hasRealLiqs = false;
 
@@ -445,8 +474,8 @@ const townField = (seed, radius, layout) => createTerrainField({
 });
 
 async function start() {
-  // ETF 資料讀不到時 ETF 星維持上鎖，主流星照常
-  const [first, etfData] = await Promise.all([loadTopCoins(), loadEtfDataset()]);
+  // ETF、恐懼貪婪資料讀不到時那顆星維持上鎖，主流星照常
+  const [first, etfData, moodData] = await Promise.all([loadTopCoins(), loadEtfDataset(), loadFearGreed()]);
   const majorRadius = planetRadius(first.coins.reduce((sum, c) => sum + c.marketCap, 0));
   const radii = { [MAJOR]: majorRadius };
   const townFields = { [MAJOR]: townField(MAJOR_TERRAIN_SEED, majorRadius, TOWN_LAYOUT[MAJOR]) };
@@ -456,13 +485,21 @@ async function start() {
     townFields[ETF] = townField(ETF_TERRAIN_SEED, radii[ETF], TOWN_LAYOUT[ETF]);
     available.add(ETF);
   }
+  if (moodData) {
+    radii[MOOD] = findPlanet(MOOD).radius;
+    townFields[MOOD] = createTerrainField({ seed: MOOD_TERRAIN_SEED, spots: MOOD_SPOTS, plazaAngle: PLAZA_RADIUS / radii[MOOD] });
+    available.add(MOOD);
+  }
   solar = createSolarSystem(scene, { radii, townFields, available, t });
   for (const id of available) {
-    const town = createTown(solar.planets.get(id).group, radii[id], TOWN_LAYOUT[id]);
+    const group = solar.planets.get(id).group;
+    const town = id === MOOD ? createMoodPlanet(group, radii[id], t) : createTown(group, radii[id], TOWN_LAYOUT[id]);
     towns.set(id, { town, data: [], radius: radii[id] });
   }
   applyData(first.coins);
   if (etfData) applyEtf(etfData);
+  if (moodData) applyMood(moodData);
+  towns.get(MOOD)?.town.setAspect(camera.aspect);
   if (first.source === 'live') lastLiveAt = first.updatedAt;
   ui.setStatus(first);
   document.fonts?.ready.then(() => towns.forEach(({ town }) => town.redrawSigns()));
@@ -473,12 +510,14 @@ async function start() {
   refreshLiquidations();
   setInterval(refreshLiquidations, LIQ_REFRESH_MS);
   setInterval(refreshEtf, ETF_REFRESH_MS);
+  setInterval(refreshMood, MOOD_REFRESH_MS);
   // 背景分頁不更新；切回來時立刻補一次，不必等下一輪
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     refresh();
     refreshLiquidations();
     refreshEtf();
+    refreshMood();
   });
   renderer.setAnimationLoop(frame);
 }

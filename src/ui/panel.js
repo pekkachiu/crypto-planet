@@ -1,5 +1,6 @@
 import { formatUsd, formatSignedUsd, formatPrice, formatPct, formatCount, buyShare } from './format.js';
 import { planetNameKey, planetSubtitleKey } from '../data/planets.js';
+import { valueDaysAgo, moodLevel } from '../data/fear-greed.js';
 
 const $ = (id) => document.getElementById(id);
 const TOAST_MS = 2600;
@@ -9,8 +10,12 @@ const LOCALES = { 'zh-TW': 'zh-TW', en: 'en-US' };
 const LEGENDS = {
   default: { 'legend-buy': 'legend.buy', 'legend-sell': 'legend.sell', 'legend-walkers': 'legend.walkers' },
   etf: { 'legend-buy': 'legend.etf.buy', 'legend-sell': 'legend.etf.sell', 'legend-walkers': 'legend.etf.walkers' },
+  mood: { 'legend-buy': 'legend.mood.buy', 'legend-sell': 'legend.mood.sell', 'legend-walkers': 'legend.mood.walkers' },
 };
-const CARD_IDS = ['coin-card', 'park-card', 'etf-card'];
+const CARD_IDS = ['coin-card', 'park-card', 'etf-card', 'mood-card'];
+/** 恐懼貪婪資訊卡上「N 天前」的欄位 */
+const MOOD_PAST = [['mood-yesterday', 1], ['mood-week', 7], ['mood-month', 30]];
+const HOUR_SECONDS = 3600;
 /** 資訊卡上最多列出幾檔 ETF 代號 */
 const MAX_LISTED_TICKERS = 6;
 
@@ -31,6 +36,8 @@ export function createUI({
   let lastPark = null;
   let lastEtf = null;
   let etfMeta = null;
+  let lastMood = null;
+  let moodMeta = null;
   let theme = initialTheme;
 
   $('back').addEventListener('click', onBack);
@@ -39,6 +46,7 @@ export function createUI({
   $('coin-close').addEventListener('click', onClose);
   $('park-close').addEventListener('click', onClose);
   $('etf-close').addEventListener('click', onClose);
+  $('mood-close').addEventListener('click', onClose);
   for (const btn of document.querySelectorAll('[data-speed]')) {
     btn.addEventListener('click', () => {
       document.querySelectorAll('[data-speed]').forEach((b) => b.classList.toggle('active', b === btn));
@@ -60,6 +68,11 @@ export function createUI({
       $('status').title = '';
       return;
     }
+    if (lastView.planet?.id === 'mood' && moodMeta) {
+      $('status').textContent = t('status.mood', { date: moodMeta.today.date });
+      $('status').title = '';
+      return;
+    }
     const { result: { source, updatedAt, error }, keptPrevious } = lastStatus;
     const time = timeText(updatedAt);
     if (keptPrevious) $('status').textContent = t('status.stale', { time });
@@ -77,10 +90,11 @@ export function createUI({
     $('back').textContent = t(mode === 'shop' || mode === 'park' ? 'back.planet' : 'back.solar');
     const planetName = planet ? t(planetNameKey(planet)) : '';
     const subtitle = planet ? t(planetSubtitleKey(planet)) : '';
+    const isMood = planet?.id === 'mood';
     const titles = {
       solar: () => t('view.solar'),
-      planet: () => t('view.planet', { planet: planetName, subtitle }),
-      shop: () => t('view.shop', { planet: planetName, symbol: coin?.symbol ?? '' }),
+      planet: () => t(isMood ? 'view.mood' : 'view.planet', { planet: planetName, subtitle }),
+      shop: () => (isMood ? t('view.gauge', { planet: planetName }) : t('view.shop', { planet: planetName, symbol: coin?.symbol ?? '' })),
       park: () => t('view.park', { planet: planetName }),
     };
     $('view-title').textContent = titles[mode]();
@@ -127,6 +141,33 @@ export function createUI({
     $('etf-traded').textContent = formatUsd(coin.valueTraded);
     $('etf-cum').textContent = formatSignedUsd(coin.cumInflow);
     $('etf-source').textContent = t('etf.source', { date: coin.date ?? '—' });
+  };
+
+  /** 分數加上翻譯過的等級，例如「61 貪婪」；level 一律來自 moodLevel()，可安全當 class 名稱 */
+  const moodText = (value) => (value === null ? '—' : `${value} ${t(`mood.level.${moodLevel(value)}`)}`);
+
+  /** 恐懼貪婪資訊卡：今天的分數、N 天前、近 30 天長條圖（由舊到新） */
+  const renderMood = () => {
+    if (!lastMood) return;
+    const { today, history, nextUpdateSec } = lastMood.data;
+    $('mood-value').textContent = String(today.value);
+    $('mood-value').className = `lv-${today.level}`;
+    $('mood-level').textContent = t(`mood.level.${today.level}`);
+    $('mood-level').className = `lv-${today.level}`;
+    for (const [id, days] of MOOD_PAST) {
+      const value = valueDaysAgo(history, days);
+      $(id).textContent = moodText(value);
+      $(id).className = value === null ? '' : `lv-${moodLevel(value)}`;
+    }
+    $('mood-chart').replaceChildren(...history.toReversed().map(({ value, level, date }) => {
+      const bar = document.createElement('span');
+      bar.className = `lv-${level}`;
+      bar.style.height = `${Math.max(2, value)}%`;
+      bar.title = `${date}・${value}`;
+      return bar;
+    }));
+    const next = nextUpdateSec === null ? [] : [t('mood.next', { hours: Math.max(1, Math.round(nextUpdateSec / HOUR_SECONDS)) })];
+    $('mood-source').textContent = [t('mood.source', { date: today.date }), ...next].join('・');
   };
 
   const renderPark = () => {
@@ -203,6 +244,12 @@ export function createUI({
     showCard('etf-card');
   };
 
+  const showMood = (mapped) => {
+    lastMood = mapped;
+    renderMood();
+    showCard('mood-card');
+  };
+
   const showPark = () => {
     renderPark();
     showCard('park-card');
@@ -250,6 +297,7 @@ export function createUI({
     renderView();
     renderCoin();
     renderEtf();
+    renderMood();
     renderPark();
     renderTheme();
   };
@@ -263,16 +311,23 @@ export function createUI({
     setView,
     showCoin,
     showEtf,
+    showMood,
     setCoins,
     setLanguage,
     hideCards() {
       lastCoin = null;
       lastEtf = null;
+      lastMood = null;
       showCard(null);
     },
     /** ETF 資料的日期，在 ETF 星上顯示於左上狀態列 */
     setEtfMeta(meta) {
       etfMeta = meta;
+      renderStatus();
+    },
+    /** 恐懼貪婪指數的日期，在恐懼貪婪星上顯示於左上狀態列 */
+    setMoodMeta(meta) {
+      moodMeta = meta;
       renderStatus();
     },
     setParkData(liqs) {
