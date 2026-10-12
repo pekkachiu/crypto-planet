@@ -163,9 +163,9 @@ export function createSolarSystem(scene, { renderer, skyWidth, radii, townFields
     sky.setNight(k);
   };
 
-  /** 每幀：星星閃爍用真實時間，天空球跟著鏡頭 */
+  /** 每幀：星星閃爍用真實時間，星空與天空球都跟著鏡頭 */
   const animate = (seconds, cameraPosition) => {
-    stars.tick(seconds);
+    stars.tick(seconds, cameraPosition, renderer.getPixelRatio());
     sky.follow(cameraPosition);
   };
 

@@ -17,15 +17,19 @@ const NOISE_GLSL = /* glsl */`
       mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y),
       f.z);
   }
+  // 星雲本來就是低頻的雲，5 個八度就夠；扭曲用的 fbm3 只要 3 個八度，烘焙成本降很多
   float fbm(vec3 p) {
     float v = 0.0;
     float a = 0.5;
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 5; i++) {
       v += a * noise(p);
       p = p * 2.03 + vec3(1.7, 9.2, 3.1);
       a *= 0.5;
     }
     return v;
+  }
+  float fbm3(vec3 p) {
+    return 0.5 * noise(p) + 0.25 * noise(p * 2.03 + vec3(1.7, 9.2, 3.1)) + 0.125 * noise(p * 4.12 + vec3(4.1, 2.6, 7.3));
   }`;
 
 /**
@@ -42,7 +46,7 @@ const NEBULA_FRAGMENT = /* glsl */`
 
     // 星雲：扭曲過的雜訊，形狀比較像雲而不是斑點
     vec3 q = d * 2.2 + vec3(4.0);
-    float w = fbm(q + 2.0 * vec3(fbm(q + 5.2), fbm(q + 1.3), fbm(q + 8.1)));
+    float w = fbm(q + 2.3 * vec3(fbm3(q + 5.2), fbm3(q + 1.3), fbm3(q + 8.1)));
     float clouds = smoothstep(0.42, 0.85, w);
     vec3 teal = vec3(0.03, 0.11, 0.17);
     vec3 purple = vec3(0.15, 0.05, 0.22);
@@ -59,8 +63,11 @@ const NEBULA_FRAGMENT = /* glsl */`
     gl_FragColor = vec4(color, 1.0);
   }`;
 
-/** 開頁時用 GPU 畫一次星雲貼圖，之後每幀只是貼圖，幾乎沒有額外成本 */
-function bakeNebula(renderer, width) {
+/**
+ * 開頁時用 GPU 畫一次星雲貼圖，之後每幀只是貼圖，幾乎沒有額外成本。
+ * 回傳 bake()：WebGL 內容遺失（手機切到背景等）再還原後，貼圖會被清空，要重畫一次。
+ */
+function createNebula(renderer, width) {
   const target = new THREE.WebGLRenderTarget(width, width / 2, { type: THREE.HalfFloatType, depthBuffer: false });
   const material = new THREE.ShaderMaterial({
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
@@ -68,22 +75,25 @@ function bakeNebula(renderer, width) {
     depthTest: false,
     depthWrite: false,
   });
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   const scene = new THREE.Scene();
-  scene.add(quad);
-  const previous = renderer.getRenderTarget();
-  renderer.setRenderTarget(target);
-  renderer.render(scene, new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1));
-  renderer.setRenderTarget(previous);
-  quad.geometry.dispose();
-  material.dispose();
-  return target.texture;
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const bake = () => {
+    const previous = renderer.getRenderTarget();
+    renderer.setRenderTarget(target);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(previous);
+  };
+  bake();
+  return { texture: target.texture, bake };
 }
 
 /** 天空球：跟著鏡頭移動，永遠在最遠處 */
 export function createSky(renderer, { width }) {
+  const nebula = createNebula(renderer, width);
+  renderer.domElement.addEventListener('webglcontextrestored', () => nebula.bake());
   const material = new THREE.MeshBasicMaterial({
-    map: bakeNebula(renderer, width), side: THREE.BackSide, depthWrite: false, fog: false,
+    map: nebula.texture, side: THREE.BackSide, depthWrite: false, fog: false,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(SKY_RADIUS, 48, 24), material);
   mesh.renderOrder = -1;
@@ -141,6 +151,11 @@ export function createStars({ count, shell, seed, pixelRatio }) {
     points,
     /** 夜晚星星大一點（k：0 白天～1 夜晚） */
     setNight(k) { material.uniforms.uScale.value = 1.3 + 0.5 * k; },
-    tick(seconds) { material.uniforms.uTime.value = seconds; },
+    /** 每幀：閃爍時間、跟著鏡頭（與天空球的視差一致）、同步像素比（視窗拖到另一個螢幕時會變） */
+    tick(seconds, cameraPosition, pixelRatio) {
+      material.uniforms.uTime.value = seconds;
+      material.uniforms.uPixelRatio.value = pixelRatio;
+      points.position.copy(cameraPosition);
+    },
   };
 }

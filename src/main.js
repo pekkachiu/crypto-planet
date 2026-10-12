@@ -25,7 +25,7 @@ import { createUI } from './ui/panel.js';
 
 const IS_MOBILE = matchMedia('(pointer: coarse)').matches || innerWidth < 720;
 /** skyWidth：星雲貼圖寬度（開頁時畫一次），手機用小一點 */
-const QUALITY = IS_MOBILE ? { maxPixelRatio: 1.5, bloomScale: 0.5, skyWidth: 2048 } : { maxPixelRatio: 2, bloomScale: 1, skyWidth: 4096 };
+const QUALITY = IS_MOBILE ? { maxPixelRatio: 1.5, bloomScale: 0.5, skyWidth: 1024 } : { maxPixelRatio: 2, bloomScale: 1, skyWidth: 2048 };
 const TAP = { maxMove: 8, maxMs: 450 };
 const MAX_FRAME_DT = 0.1;
 /** 鏡頭離星球幾倍半徑內才畫人潮 */
