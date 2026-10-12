@@ -17,15 +17,18 @@ const STORM = new THREE.Color('#7c8496');
 const CLEAR_ANGLE = 0.6;
 const SUN_COLOR = new THREE.Color('#ffd36b');
 
+/** 雲朵共用的幾顆二十面體，大小用 scale 調整 */
+const PUFF = new THREE.IcosahedronGeometry(1, 1);
+
 /** 低多邊形雲：幾顆二十面體疊在一起，底部壓平 */
 function createCloud(rng, material) {
   const cloud = new THREE.Group();
   const puffs = 3 + Math.floor(rng() * 3);
   for (let i = 0; i < puffs; i++) {
     const r = 0.4 + rng() * 0.3;
-    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), material);
+    const puff = new THREE.Mesh(PUFF, material);
     puff.position.set((i - (puffs - 1) / 2) * 0.5, rng() * 0.2, (rng() - 0.5) * 0.45);
-    puff.scale.y = 0.6;
+    puff.scale.set(r, r * 0.6, r);
     cloud.add(puff);
   }
   return cloud;
@@ -37,7 +40,7 @@ function orient(object, n) {
   object.quaternion.setFromUnitVectors(UP, n);
 }
 
-/** 太陽：發光圓盤加一圈光芒，Bloom 會帶出柔光 */
+/** 太陽：淺黃色圓盤加一圈光芒（亮度刻意低於 Bloom 門檻，白天不會糊成光團） */
 function createSun() {
   const group = new THREE.Group();
   const material = new THREE.MeshBasicMaterial({ color: SUN_COLOR.clone().multiplyScalar(1.2), toneMapped: false });
@@ -109,12 +112,13 @@ export function createWeather(radius, focus) {
   let activeDrops = 0;
 
   /** 雨滴分配到目前看得到的雲底下，在雲的切面上隨機散開 */
+  const X_AXIS = new THREE.Vector3(1, 0, 0);
   const assignDrops = () => {
     const tangent = new THREE.Vector3();
     const bitangent = new THREE.Vector3();
     drops.forEach((d, i) => {
       const n = dirs[i % Math.max(1, cloudCount)];
-      tangent.crossVectors(n, Math.abs(n.y) < 0.9 ? UP : new THREE.Vector3(1, 0, 0)).normalize();
+      tangent.crossVectors(n, Math.abs(n.y) < 0.9 ? UP : X_AXIS).normalize();
       bitangent.crossVectors(n, tangent);
       d.dir.copy(n).addScaledVector(tangent, d.jitter[0] * 2 * RAIN_SPREAD).addScaledVector(bitangent, d.jitter[1] * 2 * RAIN_SPREAD).normalize();
     });
