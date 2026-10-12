@@ -71,6 +71,24 @@
   <p class="label" id="etf-source"></p>
 </aside>
 
+<aside id="mood-card" class="panel" hidden aria-live="polite">
+  <button id="mood-close" class="close" type="button" data-i18n-aria="card.close">×</button>
+  <div class="coin-head"><h2 data-i18n="mood.title"></h2></div>
+  <div class="coin-price">
+    <span id="mood-value"></span>
+    <span id="mood-level"></span>
+  </div>
+  <dl class="coin-stats">
+    <div><dt data-i18n="mood.yesterday"></dt><dd id="mood-yesterday"></dd></div>
+    <div><dt data-i18n="mood.week"></dt><dd id="mood-week"></dd></div>
+    <div><dt data-i18n="mood.month"></dt><dd id="mood-month"></dd></div>
+  </dl>
+  <p class="label" data-i18n="mood.trend"></p>
+  <div id="mood-chart" class="mood-chart"></div>
+  <p class="scope-note" data-i18n="mood.note"></p>
+  <p class="label" id="mood-source"></p>
+</aside>
+
 <aside id="park-card" class="panel" hidden aria-live="polite">
   <button id="park-close" class="close" type="button" data-i18n-aria="card.close">×</button>
   <div class="coin-head"><h2 data-i18n="park.name"></h2></div>

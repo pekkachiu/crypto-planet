@@ -63,7 +63,7 @@ body {
   color: var(--accent); background: rgba(76, 194, 255, 0.12); border: 1px solid rgba(76, 194, 255, 0.3);
 }
 
-#coin-card, #park-card, #etf-card {
+#coin-card, #park-card, #etf-card, #mood-card {
   position: fixed; right: calc(var(--sr) + var(--gutter)); top: calc(var(--st) + 84px);
   width: 300px; padding: 18px 18px 14px;
 }
@@ -73,6 +73,16 @@ body {
 }
 .etf-name { margin: 2px 0 0; font-size: 13px; }
 #etf-inflow { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* 恐懼貪婪：五個等級的顏色與儀表刻度一致（恐懼紅、貪婪綠） */
+.lv-extremeFear { color: #ea3943; } .lv-fear { color: #f08a4b; } .lv-neutral { color: #f2c14e; }
+.lv-greed { color: #9fd356; } .lv-extremeGreed { color: #16c784; }
+#mood-value { font-size: 40px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+#mood-level { font-size: 18px; font-weight: 700; }
+.mood-chart {
+  display: flex; align-items: flex-end; gap: 2px; height: 56px; margin: 6px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.mood-chart span { flex: 1; min-height: 2px; border-radius: 2px 2px 0 0; background: currentColor; }
 .close {
   position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 10px;
   background: transparent; color: var(--muted); font-size: 22px; cursor: pointer;
@@ -161,7 +171,7 @@ body {
   #status { font-size: 10px; letter-spacing: 0.02em; }
   #top-actions .chip { padding: 10px 12px; font-size: 13px; }
   #top-actions { flex-direction: column; align-items: flex-end; }
-  #coin-card, #park-card, #etf-card {
+  #coin-card, #park-card, #etf-card, #mood-card {
     left: calc(var(--sl) + var(--gutter)); right: calc(var(--sr) + var(--gutter)); top: auto; width: auto;
     bottom: calc(var(--sb) + 136px); padding: 14px 14px 10px;
   }
@@ -170,6 +180,10 @@ body {
   /* 公園資訊卡內容較多：限制高度可捲動，並隱藏圖例，避免蓋住整個公園 */
   #park-card { max-height: 38vh; overflow-y: auto; }
   #park-card .label[data-i18n="park.legend"] { display: none; }
+  #mood-card { max-height: 42vh; overflow-y: auto; }
+  #mood-card .scope-note { display: none; }
+  #mood-value { font-size: 30px; }
+  .mood-chart { height: 36px; }
   #coin-price { font-size: 20px; }
   .coin-stats { gap: 6px 10px; margin-bottom: 8px; }
   .coin-stats dt { font-size: 10px; }

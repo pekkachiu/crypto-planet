@@ -1,6 +1,6 @@
 # CLAUDE.md — 加密星球小鎮（crypto-planet）
 
-靜態網站：把加密貨幣市場畫成低多邊形太陽系。每個分類一顆星球，每個幣種（或 ETF）是星球上的一間店。沒有後端，部署在 GitHub Pages。主流星由瀏覽器直接呼叫公開 API；ETF 星的資料要 API Key，由 GitHub Actions 抓好成 `etf.json` 一起部署。使用者面向的說明在 README.md，這份只記錄開發時需要知道的事。
+靜態網站：把加密貨幣市場畫成低多邊形太陽系。每個分類一顆星球，每個幣種（或 ETF）是星球上的一間店；恐懼貪婪星例外，是一座大儀表加整顆星球的天氣。沒有後端，部署在 GitHub Pages。主流星由瀏覽器直接呼叫公開 API；ETF 星的資料要 API Key，由 GitHub Actions 抓好成 `etf.json` 一起部署。使用者面向的說明在 README.md，這份只記錄開發時需要知道的事。
 
 ## 指令
 
@@ -34,6 +34,7 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 
 - **視角狀態**：`solar`（太陽系）→ `planet`（星球全景）→ `shop`（店門口或爆倉公園特寫），飛行中為 `flying`。`state.focusKey` 是幣種 id 或 `'park'`。`body[data-view]` 與 `body[data-theme]` 供 E2E 判斷狀態。
 - **小鎮佈局**：`townSpots({ park })` 用費氏螺旋把點撒在整顆星球上。主流星有公園：第 0 點（北極）是爆倉公園，其後依市值排名往南排；ETF 星沒有公園，全部是店面。地形的平坦廣場也用同一組點。
+- **恐懼貪婪星**（`mood`）：`scenes/mood-planet.js` 實作跟 `createTown` 一樣的介面（`setData`、`pick`、`shopFrame`、`mappedAt`…），所以沿用同一套視角流程；底部列只有一個項目 `fng`。儀表不在北極，而是往鏡頭方向偏（`MOOD_SPOTS`），進星球時才不會被切到畫面上緣。雲和雨繞著儀表方向飄、避開儀表上方；太陽依螢幕寬高比放在右側或左上方（`setAspect`），避開四角的介面。
 - **多顆小鎮星球**：`main.js` 的 `towns` Map（`major`、`etf`）。`townOf(state.focused)` 取得目前所在星球的小鎮；店面清單的共通欄位是 `mapped.coin.id`、`mapped.coin.symbol`、`mapped.sign`（招牌與底部列文字）。
 - **店面切面座標**：店在原點、門朝 +z（南），從正面看右邊（+x）排買方、左邊（-x）排賣方。人潮、欄杆、路燈都用 `groundHeight()` 貼著彎曲的球面。
 
@@ -44,6 +45,8 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 - **建築用「絕對」市值分級**（`src/data/tiers.js`），以後的迷因星小幣自然就是小攤。
 - **爆倉公園只用 OKX 資料，不是全網。** 使用者看過 Coinglass，但它的內部 API 是加密的；拆解加密等於繞過網站保護，所以不採用。付費或要 Key 的方案（Coinglass、Coinalyze）暫不使用。介面上必須保留「僅 OKX、非全網」的標示。
 - **ETF 星用 SoSoValue 官方 API**（免費 Key）。舊的免 Key 端點 `api.sosovalue.xyz` 已下線（404）；Farside 有 Cloudflare 防爬蟲保護、DefiLlama 沒有公開的 ETF API，兩者都不採用。範圍是美國現貨 ETF，**依幣種加總、一個幣種一棟**（`ETF_ASSETS`：BTC、ETH、SOL、XRP；使用者覺得每檔 ETF 一棟太多）。BTC、ETH 抓不到就整體失敗，SOL、XRP 抓不到只略過那一棟。每個幣種只打 `/etfs`（代號清單）與 `/etfs/summary-history`（總計）兩個請求。綠色隊伍＝淨流入、紅色隊伍＝淨流出。
+- **不架後端。** 需要共享狀態的功能（例如讓訪客投票看漲或看跌）都不做；新功能只能用瀏覽器直接打公開 API，或由 GitHub Actions 預先抓好成 JSON。
+- **恐懼貪婪星用 alternative.me 的指數**（免 Key、允許跨網域，瀏覽器直接抓，每小時檢查一次）。分級用它實際資料的分界（≤25、≤46、≤54、≤75、其餘），名稱由我們自己翻譯，不採用 API 回傳的字串。抓不到時這顆星上鎖，不用範例資料。
 - 即時爆倉隕石做過又拿掉了：主流幣在平靜行情下的即時爆倉太稀疏，畫面上幾乎看不到。
 - 日夜模式預設依當地時間（06–18 為白天），使用者切換後記在 localStorage。
 - 支援手機。直式螢幕用 `fitFactor()` 把鏡頭拉遠。

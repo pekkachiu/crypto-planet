@@ -10,12 +10,17 @@ const STAR_COUNT = 2200;
 const STAR_SHELL = 900;
 /** 地形細分程度：主流星要能站人，細一點；其他星球遠看即可 */
 const DETAIL = { town: 26, other: 10 };
-/** 有小鎮的星球：主流星是綠地，ETF 星是金黃色的秋天 */
+/** 有小鎮的星球：主流星是綠地，ETF 星是金黃色的秋天，恐懼貪婪星是灰綠色 */
 const TOWN_STYLES = {
   major: { palette: EARTHY, greens: ['#5fb36a', '#6fc07a', '#4fa35e', '#86c96f'] },
   etf: {
     palette: { ...EARTHY, grass: '#d8c477', sand: '#f3e3b0', plaza: '#ece0c4' },
     greens: ['#e0a63a', '#d98b2b', '#c9b14a', '#e8c25a'],
+  },
+  // 恐懼貪婪星：帶點灰的薄荷綠，晴天雨天都看得清楚
+  mood: {
+    palette: { ...EARTHY, grass: '#a9c9a0', sand: '#e9dfc4', plaza: '#e4dccb' },
+    greens: ['#7fae86', '#6f9f7a', '#94bb8c', '#86b3a0'],
   },
 };
 

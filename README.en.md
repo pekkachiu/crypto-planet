@@ -12,7 +12,7 @@ The crypto market as a tiny low-poly solar system: **each sector is a planet, an
 
 ### 🪐 Solar system
 
-Tap a planet to fly in. **Majors** and **ETF** are open now; Meme, AI and Layer 1 planets are coming soon.
+Tap a planet to fly in. **Majors**, **ETF** and **Fear & Greed** are open now; Meme, AI and Layer 1 planets are coming soon.
 
 ![Solar system](docs/screenshots/en/solar.jpg)
 
@@ -52,6 +52,20 @@ Fund flows settle on a **T+1** basis, so the numbers are from the latest settled
 
 ![ETF planet](docs/screenshots/en/etf-planet.jpg)
 
+### 🌦️ Fear & Greed planet: market sentiment
+
+Shows the crypto **Fear & Greed Index**: 0 is extreme fear, 100 is extreme greed, and it updates once a day.
+
+| What you see | What it means |
+|---|---|
+| The needle on the big gauge | Today's score, on a scale from red (fear) to green (greed) |
+| Dark clouds and rain | Fear: the lower the score, the more clouds and the heavier the rain |
+| The sun | Greed: the higher the score, the bigger the sun and the fewer the clouds |
+
+Tap the gauge or F&G at the bottom to see yesterday's, last week's and last month's scores, plus the last 30 days.
+
+![Fear & Greed planet](docs/screenshots/en/fear-greed.jpg)
+
 ### 🌙 Day and night · 📱 Mobile
 
 Switch between day and night in the top-right corner; by default it follows your local time (day is 06:00–18:00). On phones the info cards become bottom drawers and the coin bar scrolls sideways.
@@ -66,6 +80,7 @@ Switch between day and night in the top-right corner; by default it follows your
 | [Binance](https://www.binance.com/) | 24h volume, taker buys and sells, number of trades | Every 60 seconds |
 | [OKX](https://www.okx.com/) | 24h liquidations in the Liquidation Park (OKX only) | Every 5 minutes |
 | [SoSoValue](https://sosovalue.com/) | ETF fund flows, net assets, value traded | Twice a day |
+| [Alternative.me](https://alternative.me/crypto/fear-and-greed-index/) | Fear & Greed Index | Once a day |
 
 If live data can't be reached, the site falls back to bundled sample data and says so in the top-left corner.
 
