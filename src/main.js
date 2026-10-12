@@ -17,13 +17,15 @@ import { loadLiquidations } from './data/okx-liquidations.js';
 import { loadEtfDataset, rankAssets, mapEtfTown, ETF_ASSETS } from './data/etf.js';
 import { loadFearGreed, mapMood } from './data/fear-greed.js';
 import { createMoodPlanet, MOOD_SPOTS } from './scenes/mood-planet.js';
+import { moodColor } from './sim/mood-layout.js';
 import { detectTheme, THEME_STORAGE_KEY } from './ui/theme.js';
 import { applyNight } from './kit/materials.js';
 import { createCameraRig, HOME } from './scenes/camera-rig.js';
 import { createUI } from './ui/panel.js';
 
 const IS_MOBILE = matchMedia('(pointer: coarse)').matches || innerWidth < 720;
-const QUALITY = IS_MOBILE ? { maxPixelRatio: 1.5, bloomScale: 0.5 } : { maxPixelRatio: 2, bloomScale: 1 };
+/** skyWidth：星雲貼圖寬度（開頁時畫一次），手機用小一點 */
+const QUALITY = IS_MOBILE ? { maxPixelRatio: 1.5, bloomScale: 0.5, skyWidth: 1024 } : { maxPixelRatio: 2, bloomScale: 1, skyWidth: 2048 };
 const TAP = { maxMove: 8, maxMs: 450 };
 const MAX_FRAME_DT = 0.1;
 /** 鏡頭離星球幾倍半徑內才畫人潮 */
@@ -407,6 +409,8 @@ async function refreshEtf() {
 
 function applyMood(data) {
   ui.setMoodMeta(data);
+  // 大氣光暈跟著指數變色：恐懼紅、中性黃、貪婪綠
+  solar.setGlow(MOOD, moodColor(data.today.level));
   applyTownData(MOOD, [mapMood(data)]);
 }
 
@@ -490,7 +494,7 @@ async function start() {
     townFields[MOOD] = createTerrainField({ seed: MOOD_TERRAIN_SEED, spots: MOOD_SPOTS, plazaAngle: PLAZA_RADIUS / radii[MOOD] });
     available.add(MOOD);
   }
-  solar = createSolarSystem(scene, { radii, townFields, available, t });
+  solar = createSolarSystem(scene, { renderer, skyWidth: QUALITY.skyWidth, radii, townFields, available, t });
   for (const id of available) {
     const group = solar.planets.get(id).group;
     const town = id === MOOD ? createMoodPlanet(group, radii[id], t) : createTown(group, radii[id], TOWN_LAYOUT[id]);
@@ -542,6 +546,7 @@ function frame() {
   }
   if (rig.flying) rig.update(realDt);
   else controls.update();
+  solar.animate(clock.elapsedTime, camera.position);
 
   for (const [id, { town, radius }] of towns) {
     const crowdRange = radius * CROWD_VISIBLE_FACTOR * fitFactor();

@@ -26,3 +26,8 @@ export function cloudPlan({ rain, sun }) {
   }
   return { count: Math.round(CALM_CLOUDS * (1 - sun)), darkness: 0 };
 }
+
+/** 恐懼貪婪星的大氣光暈顏色：跟儀表刻度同色，未知等級用中性的黃色 */
+export function moodColor(level) {
+  return (GAUGE_BANDS.find((b) => b.level === level) ?? GAUGE_BANDS[2]).color;
+}

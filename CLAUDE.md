@@ -74,6 +74,8 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 - 人潮模擬為了效能，會在內部就地更新 agent 物件（已在 `crowd.js` 註明）；其他地方維持不可變更新。
 - `camera-rig.js` 直接改 OrbitControls 的內部欄位 `_quat`，依賴 `three@0.170.0`。升級 three 時要一併檢查。
 - **Bloom 門檻 0.95**：只有 `toneMapped: false` 且亮度大於 1 的自發光物件會泛光。白天會亮的東西用 `nightGlow(color, 白天強度, 夜晚強度)`，白天的強度要低於門檻。
+- **宇宙背景**（`kit/space.js`）：星雲在開頁時用 GPU 畫一次成貼圖（桌機 2048、手機 1024 寬），之後只是貼在跟著鏡頭的天空球上；WebGL 內容還原時會重畫。星星是一個 ShaderMaterial Points，閃爍在 GPU 上算。星雲亮度要維持在 Bloom 門檻以下。
+- **恐懼貪婪星的大氣光暈跟著指數變色**（`solar.setGlow` ＋ `moodColor`），其他星球的光暈是星球代表色。
 - **鏡頭飛行與日夜淡入淡出用真實經過時間**（`realDt`），模擬時間才限制每幀上限。CI 機器沒有 GPU，每秒只有幾幀，用受限的 dt 會讓 1.6 秒的飛行拖到十幾秒。
 - **E2E 一律攔截外部 API**（見 `e2e/app.spec.js` 的 `offline()`），不依賴網路；用 `dispatchEvent('click')` 點會公轉移動的星球標籤。
 

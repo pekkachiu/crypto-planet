@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { PLANETS, orbitPosition, planetNameKey, planetSubtitleKey } from '../data/planets.js';
-import { createRng } from '../sim/rng.js';
 import { createTerrainField } from '../sim/terrain-field.js';
 import { createTerrainMesh, createTrees, tintedPalette, EARTHY } from '../kit/terrain.js';
+import { createSky, createStars } from '../kit/space.js';
 
 const SUN_RADIUS = 11;
-const STAR_COUNT = 2200;
+const STAR_COUNT = 3200;
 const STAR_SHELL = 900;
 /** 地形細分程度：主流星要能站人，細一點；其他星球遠看即可 */
 const DETAIL = { town: 26, other: 10 };
@@ -64,20 +64,6 @@ function orbitLine(radius) {
   );
 }
 
-function starfield() {
-  const rng = createRng(2026);
-  const positions = new Float32Array(STAR_COUNT * 3);
-  for (let i = 0; i < STAR_COUNT; i++) {
-    const u = rng() * 2 - 1;
-    const t = rng() * Math.PI * 2;
-    const r = Math.sqrt(1 - u * u) * STAR_SHELL;
-    positions.set([Math.cos(t) * r, u * STAR_SHELL, Math.sin(t) * r], i * 3);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  return new THREE.Points(geo, new THREE.PointsMaterial({ color: '#cfd8ff', size: 1.6, sizeAttenuation: false }));
-}
-
 function planetLabel(planet) {
   const el = document.createElement('div');
   el.className = `planet-label${planet.enabled ? '' : ' locked'}`;
@@ -122,17 +108,18 @@ function createPlanetBody(config, index, radius, townField) {
 }
 
 /**
- * 太陽系：太陽、五顆低多邊形星球、軌道線與星空。
+ * 太陽系：太陽、低多邊形星球、軌道線、星雲與星空。
  * available：這次實際能進入的星球（例如 ETF 資料沒載入就維持上鎖）。
  * @param {THREE.Scene} scene
- * @param {{radii: Record<string, number>, townFields: Record<string, Function>, available: Set<string>, t: Function}} opts
+ * @param {{renderer: THREE.WebGLRenderer, skyWidth: number, radii: Record<string, number>, townFields: Record<string, Function>, available: Set<string>, t: Function}} opts
  */
-export function createSolarSystem(scene, { radii, townFields, available, t }) {
+export function createSolarSystem(scene, { renderer, skyWidth, radii, townFields, available, t }) {
   const ambient = new THREE.AmbientLight('#fffaf2', 0.55);
   const hemi = new THREE.HemisphereLight('#fff6ea', '#7d6d60', 0.6);
-  const stars = starfield();
+  const sky = createSky(renderer, { width: skyWidth });
+  const stars = createStars({ count: STAR_COUNT, shell: STAR_SHELL, seed: 2026, pixelRatio: renderer.getPixelRatio() });
   const sun = createSun();
-  scene.add(ambient, hemi, stars, sun.group);
+  scene.add(ambient, hemi, sky.mesh, stars.points, sun.group);
 
   const planets = new Map(PLANETS.map((base, i) => {
     const config = { ...base, enabled: base.enabled && available.has(base.id) };
@@ -142,9 +129,10 @@ export function createSolarSystem(scene, { radii, townFields, available, t }) {
     mesh.userData.planetId = config.id;
     const label = planetLabel(config);
     label.position.set(0, radius + 4.5, 0);
-    group.add(body, atmosphere(radius, config.color), label);
+    const glow = atmosphere(radius, config.color);
+    group.add(body, glow, label);
     scene.add(orbitLine(config.orbit), group);
-    return [config.id, { config, group, mesh, label, radius }];
+    return [config.id, { config, group, mesh, label, radius, glow }];
   }));
 
   const update = (time) => {
@@ -171,10 +159,22 @@ export function createSolarSystem(scene, { radii, townFields, available, t }) {
     ambient.intensity = 0.55 - 0.33 * k;
     hemi.intensity = 0.6 - 0.45 * k;
     sun.light.intensity = 1.5 - 0.9 * k;
-    stars.material.size = 1.6 + 0.9 * k;
+    stars.setNight(k);
+    sky.setNight(k);
+  };
+
+  /** 每幀：星星閃爍用真實時間，星空與天空球都跟著鏡頭 */
+  const animate = (seconds, cameraPosition) => {
+    stars.tick(seconds, cameraPosition, renderer.getPixelRatio());
+    sky.follow(cameraPosition);
+  };
+
+  /** 改變某顆星球的大氣光暈顏色（恐懼貪婪星依指數變色） */
+  const setGlow = (id, color) => {
+    planets.get(id)?.glow.material.uniforms.glowColor.value.set(color);
   };
 
   setLanguage(t);
   update(0);
-  return { planets, update, pick, setLanguage, setNight };
+  return { planets, update, pick, setLanguage, setNight, animate, setGlow };
 }
