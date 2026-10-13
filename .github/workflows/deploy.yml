@@ -3,9 +3,12 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-  # ETF 資金流是 T+1 結算，每天抓兩次（台灣時間 09:30、21:30），重新部署
+  # ETF 資金流是 T+1 結算，SoSoValue 約在美股收盤後到台灣早上公布前一個交易日的資料。
+  # 週二到週六（UTC）00:17–08:17 每小時抓一次，盡早拿到新資料；GitHub 排程常延遲數小時，多排幾次比較保險。
+  # 另外每天 13:17 再抓一次當作備援。分鐘數避開整點，整點的排程最容易被延遲。
   schedule:
-    - cron: '30 1,13 * * *'
+    - cron: '17 0-8 * * 2-6'
+    - cron: '17 13 * * *'
   workflow_dispatch:
 
 permissions:
