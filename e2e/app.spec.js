@@ -126,6 +126,18 @@ test('頁面沒有未捕捉的 JavaScript 錯誤，也沒有水平捲動', async
   expect(overflow).toBe(false);
 });
 
+test('部落格連結：右上角連回作者部落格，另開分頁，文字跟著語言切換', async ({ page }) => {
+  await openSolar(page);
+  const blog = page.locator('#blog');
+  await expect(blog).toBeVisible();
+  await expect(blog).toHaveText('部落格');
+  await expect(blog).toHaveAttribute('href', 'https://pekkachiu.github.io/');
+  await expect(blog).toHaveAttribute('target', '_blank');
+  await expect(blog).toHaveAttribute('rel', /noopener/);
+  await page.locator('#lang').click();
+  await expect(blog).toHaveText('Blog');
+});
+
 test('中英切換：介面、星球名稱與網址都跟著改，重新整理後仍記得', async ({ page }) => {
   await openSolar(page);
   await expect(page.locator('#brand h1')).toHaveText('加密星球小鎮');
