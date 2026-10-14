@@ -12,7 +12,7 @@ The crypto market as a tiny low-poly solar system: **each sector is a planet, an
 
 ### 🪐 Solar system
 
-Tap a planet to fly in. **Majors**, **ETF** and **Fear & Greed** are open now; Meme, AI and Layer 1 planets are coming soon.
+Tap a planet to fly in. All six planets are open: **Majors**, **Meme**, **AI**, **Layer 1**, **ETF** and **Fear & Greed**.
 
 ![Solar system](docs/screenshots/en/solar.jpg)
 
@@ -36,6 +36,12 @@ At the north pole of the Majors planet. The red part of the monument is long liq
 > ⚠️ **The Liquidation Park uses OKX data only**: USDT perpetuals for these ten coins over the last 24 hours. It is **not market-wide**, so the totals are much smaller than aggregate trackers such as Coinglass.
 
 ![Liquidation Park](docs/screenshots/en/liquidation-park.jpg)
+
+### 🐸 Meme · 🤖 AI · ⛓️ Layer 1
+
+Each takes the top 10 coins by market cap in a CoinGecko category that have a USDT pair on Binance. They work just like the Majors planet (building size, queues and walkers mean the same things), without a Liquidation Park. Buildings use absolute market cap, so the Meme planet is mostly kiosks. Layer 1 skips coins already on the Majors planet (BTC, ETH, SOL…) and shows chains like ADA, AVAX and SUI instead.
+
+These three planets load one by one in the background after the page opens and unlock when their data arrives.
 
 ### 🏦 ETF planet: spot ETF fund flows
 
@@ -76,7 +82,7 @@ Switch between day and night in the top-right corner; by default it follows your
 
 | Source | Used for | Refresh |
 |---|---|---|
-| [CoinGecko](https://www.coingecko.com/) | Market cap, price, 24h change | Every 60 seconds |
+| [CoinGecko](https://www.coingecko.com/) | Market cap, price, 24h change, categories (Meme, AI, Layer 1) | Majors every 60 seconds, categories every 5 minutes |
 | [Binance](https://www.binance.com/) | 24h volume, taker buys and sells, number of trades | Every 60 seconds |
 | [OKX](https://www.okx.com/) | 24h liquidations in the Liquidation Park (OKX only) | Every 5 minutes |
 | [SoSoValue](https://sosovalue.com/) | ETF fund flows, net assets, value traded | Twice a day |
