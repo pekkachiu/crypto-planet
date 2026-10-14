@@ -10,12 +10,27 @@ const STAR_COUNT = 3200;
 const STAR_SHELL = 900;
 /** 地形細分程度：主流星要能站人，細一點；其他星球遠看即可 */
 const DETAIL = { town: 26, other: 10 };
-/** 有小鎮的星球：主流星是綠地，ETF 星是金黃色的秋天，恐懼貪婪星是灰綠色 */
+/** 有小鎮的星球：主流星是綠地，ETF 星是金黃色的秋天，恐懼貪婪星是灰綠色，分類星用各自的代表色 */
 const TOWN_STYLES = {
   major: { palette: EARTHY, greens: ['#5fb36a', '#6fc07a', '#4fa35e', '#86c96f'] },
   etf: {
     palette: { ...EARTHY, grass: '#d8c477', sand: '#f3e3b0', plaza: '#ece0c4' },
     greens: ['#e0a63a', '#d98b2b', '#c9b14a', '#e8c25a'],
+  },
+  // 迷因星：粉紅糖果色的草地與棉花糖樹
+  meme: {
+    palette: { ...EARTHY, grass: '#e6a6c8', sand: '#f6dbe6', plaza: '#f1e2e8' },
+    greens: ['#f08cc0', '#e070b0', '#f4a6cf', '#c98be0'],
+  },
+  // AI 星：薰衣草紫
+  ai: {
+    palette: { ...EARTHY, grass: '#b4a6dc', sand: '#e3dcf2', plaza: '#e6e1ef' },
+    greens: ['#8f7ad6', '#a28fe0', '#7b6cc4', '#b3a0ea'],
+  },
+  // 公鏈星：青綠色
+  layer1: {
+    palette: { ...EARTHY, grass: '#8fcfbe', sand: '#d9efe6', plaza: '#e0ece7' },
+    greens: ['#3fb79a', '#56c6a8', '#2fa58a', '#78d1b6'],
   },
   // 恐懼貪婪星：帶點灰的薄荷綠，晴天雨天都看得清楚
   mood: {
@@ -66,15 +81,24 @@ function orbitLine(radius) {
 
 function planetLabel(planet) {
   const el = document.createElement('div');
-  el.className = `planet-label${planet.enabled ? '' : ' locked'}`;
+  let locked = !planet.enabled;
+  el.className = 'planet-label';
+  el.classList.toggle('locked', locked);
   el.dataset.planet = planet.id;
   const name = document.createElement('strong');
   const sub = document.createElement('span');
   el.append(name, sub);
   const object = new CSS2DObject(el);
+  let translate = null;
   object.setText = (t) => {
-    name.textContent = planet.enabled ? t(planetNameKey(planet)) : `🔒 ${t(planetNameKey(planet))}`;
+    translate = t;
+    name.textContent = locked ? `🔒 ${t(planetNameKey(planet))}` : t(planetNameKey(planet));
     sub.textContent = t(planetSubtitleKey(planet));
+  };
+  object.unlock = () => {
+    locked = false;
+    el.classList.remove('locked');
+    if (translate) object.setText(translate);
   };
   return object;
 }
@@ -174,7 +198,15 @@ export function createSolarSystem(scene, { renderer, skyWidth, radii, townFields
     planets.get(id)?.glow.material.uniforms.glowColor.value.set(color);
   };
 
+  /** 資料晚一點才到的星球（分類星）：載入成功後解鎖 */
+  const unlock = (id) => {
+    const p = planets.get(id);
+    if (!p || p.config.enabled) return;
+    planets.set(id, { ...p, config: { ...p.config, enabled: true } });
+    p.label.unlock();
+  };
+
   setLanguage(t);
   update(0);
-  return { planets, update, pick, setLanguage, setNight, animate, setGlow };
+  return { planets, update, pick, setLanguage, setNight, animate, setGlow, unlock };
 }

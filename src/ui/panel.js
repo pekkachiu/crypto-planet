@@ -38,6 +38,8 @@ export function createUI({
   let etfMeta = null;
   let lastMood = null;
   let moodMeta = null;
+  /** 分類星（迷因、AI、公鏈）各自的更新時間：id → { updatedAt } */
+  let categoryMeta = {};
   let theme = initialTheme;
 
   $('back').addEventListener('click', onBack);
@@ -70,6 +72,12 @@ export function createUI({
     }
     if (lastView.planet?.id === 'mood' && moodMeta) {
       $('status').textContent = t('status.mood', { date: moodMeta.today.date });
+      $('status').title = '';
+      return;
+    }
+    const category = categoryMeta[lastView.planet?.id];
+    if (category) {
+      $('status').textContent = t('status.live', { time: timeText(category.updatedAt) });
       $('status').title = '';
       return;
     }
@@ -323,6 +331,11 @@ export function createUI({
     /** ETF 資料的日期，在 ETF 星上顯示於左上狀態列 */
     setEtfMeta(meta) {
       etfMeta = meta;
+      renderStatus();
+    },
+    /** 分類星的更新時間，在該星球上顯示於左上狀態列 */
+    setCategoryMeta(id, { updatedAt }) {
+      categoryMeta = { ...categoryMeta, [id]: { updatedAt } };
       renderStatus();
     },
     /** 恐懼貪婪指數的日期，在恐懼貪婪星上顯示於左上狀態列 */
