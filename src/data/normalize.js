@@ -1,8 +1,8 @@
 import {
-  STABLECOIN_IDS, WRAPPED_IDS, STABLE_PRICE_TOLERANCE, STABLE_CHANGE_TOLERANCE, QUOTE_ASSET,
+  STABLECOIN_IDS, WRAPPED_IDS, STABLE_PRICE_TOLERANCE, STABLE_CHANGE_TOLERANCE, QUOTE_ASSET, PRICE_MATCH_TOLERANCE,
 } from './config.js';
 
-const KLINE = { quoteVolume: 7, trades: 8, takerBuyQuote: 10 };
+const KLINE = { close: 4, quoteVolume: 7, trades: 8, takerBuyQuote: 10 };
 
 function looksStable(m) {
   return Math.abs(m.current_price - 1) <= STABLE_PRICE_TOLERANCE
@@ -23,12 +23,25 @@ function isValidMarket(m) {
     && Number.isFinite(m.market_cap_rank);
 }
 
-export function pickCandidates(markets) {
+/** 同一個代號只留排名最前面的：Binance 交易對只看代號，同名的山寨幣會對到同一個交易對 */
+function firstPerSymbol(sorted) {
+  const seen = new Set();
+  return sorted.filter((m) => {
+    const symbol = m.symbol.toLowerCase();
+    if (seen.has(symbol)) return false;
+    seen.add(symbol);
+    return true;
+  });
+}
+
+/** excludeIds：不列入的幣（例如公鏈星排除主流星已有的幣） */
+export function pickCandidates(markets, { excludeIds = [] } = {}) {
   if (!Array.isArray(markets)) return [];
-  return markets
+  const excluded = new Set(excludeIds);
+  return firstPerSymbol(markets
     .filter(isValidMarket)
-    .filter((m) => !isExcluded(m))
-    .toSorted((a, b) => a.market_cap_rank - b.market_cap_rank);
+    .filter((m) => !isExcluded(m) && !excluded.has(m.id))
+    .toSorted((a, b) => a.market_cap_rank - b.market_cap_rank));
 }
 
 /** Number(null) 與 Number('') 都是 0，要先擋掉 */
@@ -54,6 +67,13 @@ export function parseKlines(rows) {
       trades: acc.trades + trades,
     };
   }, { quoteVolume: 0, takerBuy: 0, takerSell: 0, trades: 0 });
+}
+
+/** Binance 最後一根 K 線的收盤價跟 CoinGecko 價格接近，才是同一個幣 */
+export function priceMatches(rows, price) {
+  const close = toNumber(rows?.at(-1)?.[KLINE.close]);
+  if (!Number.isFinite(close) || !(price > 0)) return false;
+  return Math.abs(close - price) / price <= PRICE_MATCH_TOLERANCE;
 }
 
 export function binancePair(m) {
