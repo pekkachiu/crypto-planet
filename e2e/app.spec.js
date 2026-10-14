@@ -32,14 +32,33 @@ const FNG_FIXTURE = {
   metadata: { error: null },
 };
 
-async function offline(page, { etf = ETF_FIXTURE, fng = FNG_FIXTURE } = {}) {
+/** 分類星的測試資料：CoinGecko 分類只回傳迷因幣，Binance K 線收盤價跟市場價格一致 */
+const memeMarket = (id, symbol, rank, price, cap) => ({
+  id, symbol, name: id, current_price: price, market_cap: cap, market_cap_rank: rank, price_change_percentage_24h: 2.5,
+});
+const CATEGORY_FIXTURE = [
+  memeMarket('dogecoin', 'doge', 9, 0.2, 1.3e10),
+  memeMarket('shiba-inu', 'shib', 25, 0.00001, 3e9),
+  memeMarket('pepe', 'pepe', 40, 0.000008, 1.8e9),
+];
+const klineAt = (price) => [[0, String(price), String(price), String(price), String(price), '1', 0, '5000000', 900, '1', '3000000', '0']];
+
+async function offline(page, { etf = ETF_FIXTURE, fng = FNG_FIXTURE, categories = null } = {}) {
   // 測試不送訪客統計
   await page.route('https://gc.zgo.at/**', (route) => route.abort());
   await page.route('https://*.goatcounter.com/**', (route) => route.abort());
   await page.route('https://api.alternative.me/**', (route) => (fng ? route.fulfill({ json: fng }) : route.fulfill({ status: 503, body: '' })));
   await page.route('**/data/etf.json', (route) => (etf ? route.fulfill({ json: etf }) : route.fulfill({ status: 404, body: '' })));
-  await page.route('https://api.coingecko.com/**', (route) => route.fulfill({ status: 503, body: '' }));
-  await page.route('https://data-api.binance.vision/**', (route) => route.fulfill({ status: 503, body: '' }));
+  // 主流星（不帶 category）一律失敗、改用範例資料；分類星只有給了 categories 才回傳
+  await page.route('https://api.coingecko.com/**', (route) => {
+    const category = new URL(route.request().url()).searchParams.get('category');
+    return category && categories ? route.fulfill({ json: categories }) : route.fulfill({ status: 503, body: '' });
+  });
+  await page.route('https://data-api.binance.vision/**', (route) => {
+    const pair = new URL(route.request().url()).searchParams.get('symbol');
+    const market = categories?.find((m) => `${m.symbol.toUpperCase()}USDT` === pair);
+    return market ? route.fulfill({ json: klineAt(market.current_price) }) : route.fulfill({ status: 503, body: '' });
+  });
   await page.route('https://www.okx.com/api/v5/public/instruments**', (route) => route.fulfill({
     json: { code: '0', data: [{ instId: 'BTC-USDT-SWAP', uly: 'BTC-USDT', ctVal: '0.01', ctValCcy: 'BTC' }] },
   }));
@@ -68,11 +87,48 @@ test('API 失敗時顯示範例資料，太陽系六顆星球都有標籤', asyn
   }
 });
 
-test('點未開放的星球會顯示即將開放提示', async ({ page }) => {
+test('分類資料抓不到時迷因星維持上鎖，點了顯示提示', async ({ page }) => {
   await openSolar(page);
-  await page.locator('[data-planet="meme"]').dispatchEvent('click');
-  await expect(page.locator('#toast')).toContainText('迷因星即將開放');
+  await expect(page.locator('[data-planet="meme"] strong')).toHaveText('🔒 迷因星');
+  // 第一次嘗試失敗前顯示「載入中」，失敗後才顯示「暫時無法取得」
+  await expect(async () => {
+    await page.locator('[data-planet="meme"]').dispatchEvent('click');
+    await expect(page.locator('#toast')).toHaveText('迷因星資料暫時無法取得', { timeout: 500 });
+  }).toPass({ timeout: 10_000 });
   await expect(page.locator('body')).toHaveAttribute('data-view', 'solar');
+});
+
+test('迷因星：依 CoinGecko 分類蓋小鎮，沒有爆倉公園，店面資訊卡顯示幣種', async ({ page }) => {
+  await offline(page, { categories: CATEGORY_FIXTURE });
+  await openSolar(page);
+  await expect(page.locator('[data-planet="meme"] strong')).toHaveText('迷因星');
+  // 分類星依序在背景抓、每次間隔幾秒
+  await expect(page.locator('[data-planet="ai"] strong')).toHaveText('AI 星', { timeout: 15_000 });
+  await page.locator('[data-planet="meme"]').dispatchEvent('click');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await expect(page.locator('#view-title')).toContainText('迷因幣前十大');
+  await expect(page.locator('#status')).toContainText('即時資料');
+  await expect(page.locator('#coin-strip [data-park]')).toHaveCount(0);
+  await expect(page.locator('#coin-strip [data-coin]')).toHaveCount(3);
+
+  await page.locator('#coin-strip [data-coin="shiba-inu"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'shop', { timeout: 10_000 });
+  await expect(page.locator('#coin-card')).toBeVisible();
+  await expect(page.locator('#coin-symbol')).toHaveText('SHIB');
+  await expect(page.locator('#coin-pair')).toContainText('SHIBUSDT');
+
+  await page.locator('#back').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'planet', { timeout: 10_000 });
+  await page.locator('#back').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'solar', { timeout: 10_000 });
+  // 回到太陽系後主流星仍是範例資料
+  await expect(page.locator('#status')).toContainText('範例資料');
+
+  // 重新整理時 CoinGecko 被限流也沒關係：幾分鐘內的本機快取讓迷因星立刻解鎖
+  await page.route('https://api.coingecko.com/**', (route) => route.fulfill({ status: 429, body: '' }));
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'solar', { timeout: 20_000 });
+  await expect(page.locator('[data-planet="meme"] strong')).toHaveText('迷因星');
 });
 
 test('很慢的裝置（每幀延遲 0.7 秒）上，鏡頭飛行依真實時間結束', async ({ page }) => {

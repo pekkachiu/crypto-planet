@@ -1,6 +1,6 @@
 # CLAUDE.md — 加密星球小鎮（crypto-planet）
 
-靜態網站：把加密貨幣市場畫成低多邊形太陽系。每個分類一顆星球，每個幣種（或 ETF）是星球上的一間店；恐懼貪婪星例外，是一座大儀表加整顆星球的天氣。沒有後端，部署在 GitHub Pages。主流星由瀏覽器直接呼叫公開 API；ETF 星的資料要 API Key，由 GitHub Actions 抓好成 `etf.json` 一起部署。使用者面向的說明在 README.md，這份只記錄開發時需要知道的事。
+靜態網站：把加密貨幣市場畫成低多邊形太陽系。每個分類一顆星球，每個幣種（或 ETF）是星球上的一間店；恐懼貪婪星例外，是一座大儀表加整顆星球的天氣。沒有後端，部署在 GitHub Pages。主流星與分類星（迷因、AI、公鏈）由瀏覽器直接呼叫公開 API；ETF 星的資料要 API Key，由 GitHub Actions 抓好成 `etf.json` 一起部署。使用者面向的說明在 README.md，這份只記錄開發時需要知道的事。
 
 ## 指令
 
@@ -35,14 +35,16 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 - **視角狀態**：`solar`（太陽系）→ `planet`（星球全景）→ `shop`（店門口或爆倉公園特寫），飛行中為 `flying`。`state.focusKey` 是幣種 id 或 `'park'`。`body[data-view]` 與 `body[data-theme]` 供 E2E 判斷狀態。
 - **小鎮佈局**：`townSpots({ park })` 用費氏螺旋把點撒在整顆星球上。主流星有公園：第 0 點（北極）是爆倉公園，其後依市值排名往南排；ETF 星沒有公園，全部是店面。地形的平坦廣場也用同一組點。
 - **恐懼貪婪星**（`mood`）：`scenes/mood-planet.js` 實作跟 `createTown` 一樣的介面（`setData`、`pick`、`shopFrame`、`mappedAt`…），所以沿用同一套視角流程；底部列只有一個項目 `fng`。儀表不在北極，而是往鏡頭方向偏（`MOOD_SPOTS`），進星球時才不會被切到畫面上緣。雲和雨繞著儀表方向飄、避開儀表上方；太陽依螢幕寬高比放在右側或左上方（`setAspect`），避開四角的介面。
-- **多顆小鎮星球**：`main.js` 的 `towns` Map（`major`、`etf`）。`townOf(state.focused)` 取得目前所在星球的小鎮；店面清單的共通欄位是 `mapped.coin.id`、`mapped.coin.symbol`、`mapped.sign`（招牌與底部列文字）。
+- **多顆小鎮星球**：`main.js` 的 `towns` Map（`major`、`etf`、`mood`、`meme`、`ai`、`layer1`）。`townOf(state.focused)` 取得目前所在星球的小鎮；店面清單的共通欄位是 `mapped.coin.id`、`mapped.coin.symbol`、`mapped.sign`（招牌與底部列文字）。
+- **分類星**（`planets.js` 裡有 `category` 的星球）：開頁時就用設定裡的固定半徑蓋好地形與空的小鎮，標籤先上鎖；`refreshCategories()` 在背景一顆一顆抓（間隔 `CATEGORY_GAP_MS`），抓到才 `solar.unlock(id)`。上鎖中的每分鐘重試，有資料的每 5 分鐘更新。重新整理時先讀 localStorage 裡 5 分鐘內的快取（`category-cache.js`，讀回來會重新驗證欄位）。
 - **店面切面座標**：店在原點、門朝 +z（南），從正面看右邊（+x）排買方、左邊（-x）排賣方。人潮、欄杆、路燈都用 `groundHeight()` 貼著彎曲的球面。
 
 ## 產品決定（不要再改或重問）
 
 - **顏色是國際慣例：綠漲紅跌。** 買方、空單爆倉是綠色；賣方、多單爆倉是紅色。顏色代表行情方向，不是倉位方向。
 - **前十大的定義**：排除穩定幣與包裝幣後，在 Binance 有 USDT 現貨交易對的市值前十名。Binance 沒上架的幣拿不到主動買賣量，所以不列入。
-- **建築用「絕對」市值分級**（`src/data/tiers.js`），以後的迷因星小幣自然就是小攤。
+- **建築用「絕對」市值分級**（`src/data/tiers.js`），迷因星的小幣自然就是小攤。
+- **分類星用 CoinGecko 分類**（`meme-token`、`artificial-intelligence`、`layer-1`），每顆前十大，一樣要有 Binance USDT 交易對。**公鏈星排除主流星已有的幣**（不然幾乎跟主流星重複）。分類星沒有爆倉公園。不同分類可以有同一個幣（例如 NEAR、TAO 同時在 AI 與公鏈）。
 - **爆倉公園只用 OKX 資料，不是全網。** 使用者看過 Coinglass，但它的內部 API 是加密的；拆解加密等於繞過網站保護，所以不採用。付費或要 Key 的方案（Coinglass、Coinalyze）暫不使用。介面上必須保留「僅 OKX、非全網」的標示。
 - **ETF 星用 SoSoValue 官方 API**（免費 Key）。舊的免 Key 端點 `api.sosovalue.xyz` 已下線（404）；Farside 有 Cloudflare 防爬蟲保護、DefiLlama 沒有公開的 ETF API，兩者都不採用。範圍是美國現貨 ETF，**依幣種加總、一個幣種一棟**（`ETF_ASSETS`：BTC、ETH、SOL、XRP；使用者覺得每檔 ETF 一棟太多）。BTC、ETH 抓不到就整體失敗，SOL、XRP 抓不到只略過那一棟。每個幣種只打 `/etfs`（代號清單）與 `/etfs/summary-history`（總計）兩個請求。綠色隊伍＝淨流入、紅色隊伍＝淨流出。
 - **不架後端。** 需要共享狀態的功能（例如讓訪客投票看漲或看跌）都不做；新功能只能用瀏覽器直接打公開 API，或由 GitHub Actions 預先抓好成 JSON。
@@ -64,6 +66,8 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 - **SoSoValue**（`openapi.sosovalue.com/openapi/v1`，header `x-soso-api-key`）：每分鐘 20 次、每月 10 萬次，`etf-fetch.js` 每個請求間隔 3.2 秒並處理 429。資金流 T+1 結算，`summary-history` 的第一筆可能是 null（還沒結算），要跳過。個別 ETF 快照的 `prem_dsc` 目前回傳 null。
 - **API Key 存在 `github-pages` 環境（environment）的 secret `SOSOVALUE_API_KEY`**，不是 repo secret。這個環境只允許 main 分支，只有 `deploy.yml` 的 `etf-data` job 拿得到；該 job 不跑 `npm ci`，`fetch-etf.mjs` 也不載入任何 npm 套件。請求設 `redirect: 'error'`，避免 Key 被導向轉送。絕對不要把 Key 放進 `src/`、前端程式碼或任何 log。本機用 `.env.local`（已 gitignore）。
 - 排程（schedule）的 workflow 在 repo 60 天沒有活動後會被 GitHub 自動停用，ETF 資料就不會再更新；網頁會顯示資料日期，看到日期太舊時到 Actions 重新啟用。
+- **CoinGecko 免 Key 的限流很嚴**：實測連打 3～5 次就回 429，大約一分鐘恢復約 5 次。主流星每分鐘用 1 次，分類星不能同時打，開頁也不能一口氣抓完；新增分類星前要算額度。
+- **同代號的山寨幣**：CoinGecko 分類裡會有同代號的幣（例如兩個 `doge`），Binance 交易對只看代號。`pickCandidates` 每個代號只留排名最前面的，`priceMatches` 再比對 Binance 收盤價與 CoinGecko 價格（差 15% 以上就略過）。
 - 用 Python `urllib` 打 OKX 會被擋（403，缺 User-Agent），測試 API 請改用 Node 的 `fetch` 或 curl。
 
 ## 慣例
@@ -85,5 +89,4 @@ node --env-file=.env.local scripts/fetch-etf.mjs   # 用 SoSoValue Key 產生 pu
 
 ## 待辦
 
-- 迷因、AI、公鏈星球：CoinGecko 有 `/coins/categories` 可以用。
 - SoSoValue 還有 LTC、HBAR、DOGE、LINK、AVAX、DOT 與香港 ETF，要加的話改 `ETF_ASSETS`（每多一種幣多 2 個請求、一棟樓）。

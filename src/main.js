@@ -5,13 +5,14 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
-import { loadTopCoins } from './data/api.js';
+import { loadTopCoins, loadCategoryCoins } from './data/api.js';
 import { mapTown, planetRadius } from './data/mapping.js';
-import { REFRESH_MS } from './data/config.js';
+import { REFRESH_MS, CATEGORY_REFRESH_MS, CATEGORY_GAP_MS } from './data/config.js';
+import { cacheKey, encodeCache, decodeCache } from './data/category-cache.js';
 import { createSolarSystem } from './scenes/solar-system.js';
 import { createTown, townSpots, PLAZA_RADIUS } from './scenes/planet-town.js';
 import { createTerrainField } from './sim/terrain-field.js';
-import { planetNameKey, findPlanet } from './data/planets.js';
+import { PLANETS, planetNameKey, findPlanet } from './data/planets.js';
 import { detectLang, createTranslator, STORAGE_KEY } from './i18n/index.js';
 import { loadLiquidations } from './data/okx-liquidations.js';
 import { loadEtfDataset, rankAssets, mapEtfTown, ETF_ASSETS } from './data/etf.js';
@@ -39,6 +40,8 @@ const SHOP_VIEW = { up: 4.2, back: 7.4, lookRatio: 0.24, minLook: 0.8, lookAhead
 const MAJOR_TERRAIN_SEED = 118;
 const ETF_TERRAIN_SEED = 307;
 const MOOD_TERRAIN_SEED = 512;
+/** 分類星（迷因、AI、公鏈）的地形種子 */
+const CATEGORY_TERRAIN_SEEDS = { meme: 733, ai: 941, layer1: 1187 };
 /** 恐懼貪婪指數每天只更新一次，每小時檢查一次就夠 */
 const MOOD_REFRESH_MS = 60 * 60_000;
 /** etf.json 由部署流程每天更新兩次，網頁每 30 分鐘重新讀一次就夠 */
@@ -131,6 +134,9 @@ const PARK_KEY = 'park';
 const MAJOR = 'major';
 const ETF = 'etf';
 const MOOD = 'mood';
+/** 依 CoinGecko 分類蓋小鎮的星球：迷因、AI、公鏈 */
+const CATEGORY_PLANETS = PLANETS.filter((p) => p.category);
+const isCategory = (id) => CATEGORY_PLANETS.some((p) => p.id === id);
 let solar = null;
 /** 有小鎮的星球：id → { town, data（換算後的店面清單）, radius } */
 const towns = new Map();
@@ -274,7 +280,7 @@ async function enterPlanet(planet) {
   if (state.view !== 'solar') return;
   if (!planet.config.enabled) {
     const UNAVAILABLE = { [ETF]: 'toast.etfUnavailable', [MOOD]: 'toast.moodUnavailable' };
-    const key = UNAVAILABLE[planet.config.id] ?? 'toast.locked';
+    const key = UNAVAILABLE[planet.config.id] ?? categoryToast(planet.config.id) ?? 'toast.locked';
     ui.toast(t(key, { planet: t(planetNameKey(planet.config)) }));
     return;
   }
@@ -435,6 +441,72 @@ async function refreshMood() {
   }
 }
 
+/** 分類星的幣種：公鏈星不列入主流星已有的幣 */
+function loadCategory(planet, majorCoins) {
+  const excludeIds = planet.excludeMajor ? majorCoins.map((c) => c.id) : [];
+  return loadCategoryCoins({ category: planet.category, excludeIds });
+}
+
+const categoryStorage = {
+  get(id) { try { return localStorage.getItem(cacheKey(id)); } catch { return null; } },
+  set(id, value) { try { localStorage.setItem(cacheKey(id), value); } catch { /* 存不了只是下次要重抓 */ } },
+};
+
+/** 每顆分類星上次成功取得資料的時間（毫秒），還沒有資料的不在裡面 */
+const categoryAt = new Map();
+/** 已經試著抓過的分類星：還沒抓過的顯示「載入中」，抓過但失敗的顯示「暫時無法取得」 */
+const categoryTried = new Set();
+
+function categoryToast(id) {
+  if (!isCategory(id)) return null;
+  return categoryTried.has(id) ? 'toast.categoryUnavailable' : 'toast.categoryLoading';
+}
+
+function applyCategory(id, result) {
+  categoryAt.set(id, Date.parse(result.updatedAt));
+  ui.setCategoryMeta(id, result);
+  applyTownData(id, mapTown(result.coins));
+  solar.unlock(id);
+}
+
+/** 開頁時先用幾分鐘內的本機快取，馬上解鎖，不必等 CoinGecko */
+function applyCachedCategories() {
+  for (const planet of CATEGORY_PLANETS) {
+    const cached = decodeCache(categoryStorage.get(planet.id), { now: Date.now(), maxAgeMs: CATEGORY_REFRESH_MS });
+    if (cached) applyCategory(planet.id, cached);
+  }
+}
+
+const isStale = (id) => !categoryAt.has(id) || Date.now() - categoryAt.get(id) >= CATEGORY_REFRESH_MS;
+const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+let refreshingCategories = false;
+
+/**
+ * CoinGecko 免 Key 每分鐘只有大約 5 次額度（主流星每分鐘用掉 1 次）：分類星一顆一顆抓、中間間隔 CATEGORY_GAP_MS。
+ * 有資料的星球每 CATEGORY_REFRESH_MS 更新一次；還沒有資料（上鎖中）的每分鐘重試，抓到就解鎖。
+ */
+async function refreshCategories() {
+  if (refreshingCategories || document.hidden || state.view === 'flying') return;
+  refreshingCategories = true;
+  try {
+    const due = CATEGORY_PLANETS.filter((p) => isStale(p.id));
+    for (const [i, planet] of due.entries()) {
+      if (i > 0) await wait(CATEGORY_GAP_MS);
+      const result = await loadCategory(planet, towns.get(MAJOR).data.map((m) => m.coin));
+      categoryTried.add(planet.id);
+      // 抓不到時保留目前的資料（還沒有資料的就繼續上鎖，下一輪再試）
+      if (!result) continue;
+      categoryStorage.set(planet.id, encodeCache(result));
+      applyCategory(planet.id, result);
+    }
+  } catch (err) {
+    console.error('[crypto-planet] 分類星更新失敗', err);
+  } finally {
+    refreshingCategories = false;
+  }
+}
+
 let refreshingLiqs = false;
 let hasRealLiqs = false;
 
@@ -476,8 +548,12 @@ async function refresh() {
   }
 }
 
-/** 有小鎮的星球設定：主流星有爆倉公園、十間店；ETF 星一個幣種一棟 */
-const TOWN_LAYOUT = { [MAJOR]: { park: true }, [ETF]: { park: false, count: ETF_ASSETS.length } };
+/** 有小鎮的星球設定：主流星有爆倉公園、十間店；ETF 星一個幣種一棟；分類星沒有公園（爆倉資料只放主流星） */
+const TOWN_LAYOUT = {
+  [MAJOR]: { park: true },
+  [ETF]: { park: false, count: ETF_ASSETS.length },
+  ...Object.fromEntries(CATEGORY_PLANETS.map((p) => [p.id, { park: false }])),
+};
 
 /** 小鎮星球的地形：店面與公園位置整平成廣場 */
 const townField = (seed, radius, layout) => createTerrainField({
@@ -485,7 +561,7 @@ const townField = (seed, radius, layout) => createTerrainField({
 });
 
 async function start() {
-  // ETF、恐懼貪婪資料讀不到時那顆星維持上鎖，主流星照常
+  // ETF、恐懼貪婪資料讀不到時那顆星維持上鎖，主流星照常；分類星開頁後才在背景抓，抓到再解鎖
   const [first, etfData, moodData] = await Promise.all([loadTopCoins(), loadEtfDataset(), loadFearGreed()]);
   const majorRadius = planetRadius(first.coins.reduce((sum, c) => sum + c.marketCap, 0));
   const radii = { [MAJOR]: majorRadius };
@@ -501,8 +577,13 @@ async function start() {
     townFields[MOOD] = createTerrainField({ seed: MOOD_TERRAIN_SEED, spots: MOOD_SPOTS, plazaAngle: PLAZA_RADIUS / radii[MOOD] });
     available.add(MOOD);
   }
+  // 分類星的小鎮先蓋好（還沒有店面），大小用設定裡的固定半徑，因為開頁時還沒有市值資料
+  for (const { id, radius } of CATEGORY_PLANETS) {
+    radii[id] = radius;
+    townFields[id] = townField(CATEGORY_TERRAIN_SEEDS[id], radius, TOWN_LAYOUT[id]);
+  }
   solar = createSolarSystem(scene, { renderer, skyWidth: QUALITY.skyWidth, radii, townFields, available, t });
-  for (const id of available) {
+  for (const id of [...available, ...CATEGORY_PLANETS.map((p) => p.id)]) {
     const group = solar.planets.get(id).group;
     const town = id === MOOD ? createMoodPlanet(group, radii[id], t) : createTown(group, radii[id], TOWN_LAYOUT[id]);
     towns.set(id, { town, data: [], radius: radii[id] });
@@ -510,6 +591,7 @@ async function start() {
   applyData(first.coins);
   if (etfData) applyEtf(etfData);
   if (moodData) applyMood(moodData);
+  applyCachedCategories();
   towns.get(MOOD)?.town.setAspect(camera.aspect);
   if (first.source === 'live') lastLiveAt = first.updatedAt;
   ui.setStatus(first);
@@ -522,6 +604,8 @@ async function start() {
   setInterval(refreshLiquidations, LIQ_REFRESH_MS);
   setInterval(refreshEtf, ETF_REFRESH_MS);
   setInterval(refreshMood, MOOD_REFRESH_MS);
+  refreshCategories();
+  setInterval(refreshCategories, REFRESH_MS);
   // 背景分頁不更新；切回來時立刻補一次，不必等下一輪
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
@@ -529,6 +613,7 @@ async function start() {
     refreshLiquidations();
     refreshEtf();
     refreshMood();
+    refreshCategories();
   });
   renderer.setAnimationLoop(frame);
 }

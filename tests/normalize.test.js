@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isExcluded, pickCandidates, parseKlines, buildCoin } from '../src/data/normalize.js';
+import { isExcluded, pickCandidates, parseKlines, buildCoin, priceMatches } from '../src/data/normalize.js';
 
 const market = (over = {}) => ({
   id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', current_price: 82800,
@@ -72,5 +72,32 @@ describe('buildCoin', () => {
       rank: 1, change24h: 1.25, volume24h: 150, takerBuy: 70, takerSell: 80, trades: 15,
       pair: 'BTCUSDT',
     });
+  });
+});
+
+describe('pickCandidates 的去重與排除', () => {
+  const m = (id, symbol, rank) => ({ id, symbol, name: id, current_price: 5, market_cap: 1e9, market_cap_rank: rank });
+  it('同一個代號只留市值排名最前面的（同名山寨幣會對到同一個 Binance 交易對）', () => {
+    const picked = pickCandidates([m('doge-clone', 'doge', 900), m('dogecoin', 'doge', 9)]);
+    expect(picked.map((x) => x.id)).toEqual(['dogecoin']);
+  });
+  it('排除指定的 id', () => {
+    const picked = pickCandidates([m('bitcoin', 'btc', 1), m('tron', 'trx', 8)], { excludeIds: ['bitcoin'] });
+    expect(picked.map((x) => x.id)).toEqual(['tron']);
+  });
+});
+
+describe('priceMatches', () => {
+  const rows = (close) => [[0, '1', '1', '1', close, '1', 0, '1', 1, '1', '1', '0']];
+  it('最後一根 K 線收盤價跟市場價格接近時為 true', () => {
+    expect(priceMatches(rows('100'), 104)).toBe(true);
+  });
+  it('差距過大（不同的幣）時為 false', () => {
+    expect(priceMatches(rows('0.2'), 10)).toBe(false);
+  });
+  it('資料缺漏時為 false', () => {
+    expect(priceMatches([], 10)).toBe(false);
+    expect(priceMatches(rows('abc'), 10)).toBe(false);
+    expect(priceMatches(rows('1'), 0)).toBe(false);
   });
 });

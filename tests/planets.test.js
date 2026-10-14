@@ -8,8 +8,15 @@ describe('PLANETS', () => {
     expect(ids).toEqual(expect.arrayContaining(['major', 'meme', 'ai', 'layer1', 'etf', 'mood']));
     expect(new Set(ids).size).toBe(ids.length);
   });
-  it('主流星、ETF 星、恐懼貪婪星開放（後兩顆要等資料載入成功才解鎖）', () => {
-    expect(PLANETS.filter((p) => p.enabled).map((p) => p.id)).toEqual(['major', 'etf', 'mood']);
+  it('六顆星球都開放（主流星以外要等資料載入成功才解鎖）', () => {
+    expect(PLANETS.every((p) => p.enabled)).toBe(true);
+  });
+  it('迷因、AI、公鏈星各對應一個 CoinGecko 分類，公鏈星排除主流星已有的幣', () => {
+    expect(findPlanet('meme').category).toBe('meme-token');
+    expect(findPlanet('ai').category).toBe('artificial-intelligence');
+    expect(findPlanet('layer1').category).toBe('layer-1');
+    expect(findPlanet('layer1').excludeMajor).toBe(true);
+    expect(PLANETS.filter((p) => p.category).map((p) => p.id)).toEqual(['meme', 'ai', 'layer1']);
   });
   it('軌道半徑不重複，相鄰軌道至少相隔 25，不會撞在一起', () => {
     const orbits = PLANETS.map((p) => p.orbit).toSorted((a, b) => a - b);
